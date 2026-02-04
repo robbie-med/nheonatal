@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="15" fill="#0d6efd"/>
+  <text x="50" y="40" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="20" font-weight="bold">Neo</text>
+  <text x="50" y="65" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16">Calc</text>
+  <circle cx="25" cy="80" r="8" fill="#e74c3c"/>
+  <circle cx="75" cy="80" r="8" fill="#f39c12"/>
+</svg>

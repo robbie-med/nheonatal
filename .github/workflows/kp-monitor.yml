@@ -1,0 +1,84 @@
+name: KP EOS Model Monitor
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check-kp-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run KP fingerprint check
+        id: check
+        continue-on-error: true
+        run: node scripts/kp_fingerprint.js
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --quiet public/kp_status.json || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit status update
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add public/kp_status.json
+          git commit -m "Update KP status: $(jq -r '.status' public/kp_status.json)"
+          git push
+
+      - name: Create issue if changed
+        if: steps.check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const status = JSON.parse(fs.readFileSync('public/kp_status.json', 'utf8'));
+
+            // Check for existing open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'kp-model-change'
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'KP EOS Calculator Model May Have Changed',
+                body: `## KP Model Change Detected
+
+            The automated fingerprint check has detected a change in the Kaiser Permanente EOS Calculator reference page.
+
+            **Details:**
+            - Checked: ${status.last_checked_iso}
+            - Expected fingerprint: \`${status.fingerprint_expected}\`
+            - Current fingerprint: \`${status.fingerprint_current}\`
+            - Source URL: ${status.source_url}
+
+            **Action Required:**
+            1. Review the KP EOS Calculator Model Update FAQ page
+            2. Verify if the underlying model coefficients have changed
+            3. Update the local EOS implementation if needed
+            4. Update the expected fingerprint in \`public/kp_status.json\`
+
+            This is an automated message from the KP Model Monitor workflow.`,
+                labels: ['kp-model-change', 'needs-review']
+              });
+            }
