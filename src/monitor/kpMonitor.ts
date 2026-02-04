@@ -7,7 +7,7 @@
 
 import { KPStatus } from '../types';
 
-const STATUS_FILE_URL = '/nheonatal/kp_status.json';
+const STATUS_FILE_URL = '/kp_status.json';
 
 // Default status when unable to fetch
 const DEFAULT_STATUS: KPStatus = {

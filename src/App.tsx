@@ -65,7 +65,7 @@ export function App() {
 
   // Load config on mount
   useEffect(() => {
-    fetch('/nheonatal/config.json')
+    fetch('/config.json')
       .then(res => res.ok ? res.json() : DEFAULT_CONFIG)
       .then(cfg => setConfig({ ...DEFAULT_CONFIG, ...cfg }))
       .catch(() => setConfig(DEFAULT_CONFIG));
