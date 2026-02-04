@@ -1,6 +1,19 @@
 import Dexie, { Table } from 'dexie';
 import { Patient, Snapshot } from '../types';
 
+// UUID generator with fallback for older browsers
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback implementation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export class NeoCalcDB extends Dexie {
   patients!: Table<Patient, string>;
   snapshots!: Table<Snapshot, string>;
@@ -19,7 +32,7 @@ export const db = new NeoCalcDB();
 // Patient operations
 export async function createPatient(label: string): Promise<Patient> {
   const patient: Patient = {
-    patientId: crypto.randomUUID(),
+    patientId: generateUUID(),
     label,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -58,7 +71,7 @@ export async function createSnapshot(
   notes: Snapshot['notes']
 ): Promise<Snapshot> {
   const snapshot: Snapshot = {
-    snapshotId: crypto.randomUUID(),
+    snapshotId: generateUUID(),
     patientId,
     timestamp: new Date().toISOString(),
     inputs,
