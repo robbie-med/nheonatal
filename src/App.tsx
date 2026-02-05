@@ -25,7 +25,7 @@ const DEFAULT_CONFIG: AppConfig = {
     }
   },
   bili: {
-    api_enabled: true,
+    api_enabled: false,
     api_base_url: 'https://peditools.org/bili2022/api/'
   },
   ui: {
@@ -220,9 +220,9 @@ export function App() {
           </div>
         )}
 
-        {!apiAvailable && (
+        {config.bili.api_enabled && !apiAvailable && (
           <div className="warning-banner">
-            PediTools API unavailable. Using local threshold calculations.
+            PediTools API unavailable. Using local AAP 2022 threshold calculations.
           </div>
         )}
 
