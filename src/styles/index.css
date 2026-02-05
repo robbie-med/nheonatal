@@ -378,6 +378,7 @@ body {
 
 .fieldset-shared legend { color: var(--primary); }
 .fieldset-eos legend { color: var(--eos-color); }
+.fieldset-eos-model legend { color: var(--eos-color); }
 .fieldset-bili legend { color: var(--bili-color); }
 
 .input-group {
@@ -614,6 +615,184 @@ body {
 }
 
 /* Responsive */
+/* EOS Model Selector */
+.model-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.model-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.model-option:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.model-option:has(input:checked) {
+  border-color: var(--eos-color);
+  background-color: rgba(231, 76, 60, 0.05);
+}
+
+.model-option input[type="radio"] {
+  margin-top: 0.25rem;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--eos-color);
+}
+
+.model-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.model-label strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.model-label small {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.model-info-box {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.model-info-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.model-info-header strong {
+  font-size: 0.9rem;
+  color: var(--eos-color);
+}
+
+.model-methodology {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.model-gbs-note {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  padding: 0.5rem;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  border-left: 3px solid var(--warning);
+}
+
+.gbs-icon {
+  font-weight: 600;
+  color: var(--warning-text);
+  margin-right: 0.25rem;
+}
+
+/* Model Guidance Panel */
+.model-guidance-panel h4 {
+  color: var(--eos-color) !important;
+  margin-bottom: 1rem;
+}
+
+.guidance-section {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.guidance-section:last-of-type {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.guidance-section h5 {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.guidance-section p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+  line-height: 1.5;
+}
+
+.guidance-note {
+  font-style: italic;
+  color: var(--text-muted) !important;
+}
+
+.key-difference {
+  background-color: var(--bg-primary);
+  padding: 0.75rem;
+  border-radius: 4px;
+  border-left: 3px solid var(--eos-color);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+/* Clinical Definitions Panel */
+.clinical-definitions-panel h4 {
+  color: var(--eos-color) !important;
+}
+
+.clinical-definition {
+  margin-bottom: 1rem;
+}
+
+.clinical-definition:last-child {
+  margin-bottom: 0;
+}
+
+.clinical-definition h5 {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Technical Note Panel */
+.technical-note-panel h4 {
+  color: var(--primary) !important;
+  margin-bottom: 0.75rem;
+}
+
+.technical-note-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0.75rem;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  border-left: 3px solid var(--primary);
+}
+
 /* Risk info panels and toggles */
 .info-toggle {
   background: none;

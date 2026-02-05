@@ -1,5 +1,8 @@
 // Core types for the Neonatal Calculator application
 
+// EOS Model Version - Original (2017) vs Updated (2024)
+export type EOSModelVersion = '2017' | '2024';
+
 export interface Patient {
   patientId: string;
   label: string;
@@ -8,6 +11,7 @@ export interface Patient {
 }
 
 export interface EOSInputs {
+  modelVersion: EOSModelVersion;
   gestationalAgeWeeks: number;
   gestationalAgeDays: number;
   maternalTempC: number;

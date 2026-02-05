@@ -1,9 +1,15 @@
 import { useState } from 'react';
-import { EOSInputs, BiliInputs } from '../types';
+import { EOSInputs, BiliInputs, EOSModelVersion } from '../types';
 import {
   NEUROTOXICITY_RISK_FACTORS,
   SIGNIFICANT_HYPERBILIRUBINEMIA_RISK_FACTORS
 } from '../calc/biliThresholds';
+import {
+  getModelInfo,
+  MODEL_SELECTION_GUIDANCE,
+  CLINICAL_PRESENTATION_DEFINITIONS,
+  TECHNICAL_VARIANCE_NOTE
+} from '../calc/eos';
 
 interface InputFormProps {
   eosInputs: EOSInputs;
@@ -20,6 +26,11 @@ export function InputForm({
 }: InputFormProps) {
   const [showNeurotoxRiskInfo, setShowNeurotoxRiskInfo] = useState(false);
   const [showHyperBiliRiskInfo, setShowHyperBiliRiskInfo] = useState(false);
+  const [showModelGuidance, setShowModelGuidance] = useState(false);
+  const [showClinicalDefinitions, setShowClinicalDefinitions] = useState(false);
+  const [showTechnicalNote, setShowTechnicalNote] = useState(false);
+
+  const modelInfo = getModelInfo(eosInputs.modelVersion);
 
   return (
     <section className="section input-form">
@@ -53,6 +64,99 @@ export function InputForm({
               />
             </label>
           </div>
+        </fieldset>
+
+        {/* EOS Model Selection */}
+        <fieldset className="fieldset fieldset-eos-model">
+          <legend>EOS Model Version</legend>
+
+          <div className="model-selector">
+            <label className="model-option">
+              <input
+                type="radio"
+                name="eosModel"
+                value="2024"
+                checked={eosInputs.modelVersion === '2024'}
+                onChange={() => onEOSChange({ modelVersion: '2024' as EOSModelVersion })}
+              />
+              <span className="model-label">
+                <strong>Updated (2024)</strong>
+                <small>Cohort-based, recommended for universal GBS screening</small>
+              </span>
+            </label>
+            <label className="model-option">
+              <input
+                type="radio"
+                name="eosModel"
+                value="2017"
+                checked={eosInputs.modelVersion === '2017'}
+                onChange={() => onEOSChange({ modelVersion: '2017' as EOSModelVersion })}
+              />
+              <span className="model-label">
+                <strong>Original (2017)</strong>
+                <small>Case-control, use if GBS screening not universal</small>
+              </span>
+            </label>
+          </div>
+
+          <div className="model-info-box">
+            <div className="model-info-header">
+              <strong>Using: {modelInfo.name}</strong>
+              <span className="model-methodology">{modelInfo.methodology}</span>
+            </div>
+            <div className="model-gbs-note">
+              <span className="gbs-icon">GBS:</span> {modelInfo.gbsNote}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="info-toggle-standalone"
+            onClick={() => setShowModelGuidance(!showModelGuidance)}
+          >
+            {showModelGuidance ? '▼' : '▶'} Which model should I use?
+          </button>
+
+          {showModelGuidance && (
+            <div className="risk-info-panel model-guidance-panel">
+              <h4>{MODEL_SELECTION_GUIDANCE.title}</h4>
+
+              <div className="guidance-section">
+                <h5>Use Updated (2024) Model when:</h5>
+                <p><strong>{MODEL_SELECTION_GUIDANCE.recommendation2024.when}</strong></p>
+                <p>{MODEL_SELECTION_GUIDANCE.recommendation2024.rationale}</p>
+                <p className="guidance-note">{MODEL_SELECTION_GUIDANCE.recommendation2024.note}</p>
+              </div>
+
+              <div className="guidance-section">
+                <h5>Use Original (2017) Model when:</h5>
+                <p><strong>{MODEL_SELECTION_GUIDANCE.recommendation2017.when}</strong></p>
+                <p>{MODEL_SELECTION_GUIDANCE.recommendation2017.rationale}</p>
+                <p className="guidance-note">{MODEL_SELECTION_GUIDANCE.recommendation2017.note}</p>
+              </div>
+
+              <div className="key-difference">
+                <strong>Key Difference:</strong> {MODEL_SELECTION_GUIDANCE.keyDifference}
+              </div>
+
+              <p className="citation">{MODEL_SELECTION_GUIDANCE.citation}</p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="info-toggle-standalone"
+            onClick={() => setShowTechnicalNote(!showTechnicalNote)}
+          >
+            {showTechnicalNote ? '▼' : '▶'} Technical Note for Clinicians
+          </button>
+
+          {showTechnicalNote && (
+            <div className="risk-info-panel technical-note-panel">
+              <h4>Statement for Clinicians</h4>
+              <pre className="technical-note-content">{TECHNICAL_VARIANCE_NOTE}</pre>
+            </div>
+          )}
         </fieldset>
 
         {/* EOS-specific inputs */}
@@ -159,6 +263,33 @@ export function InputForm({
               />
             </label>
           </div>
+
+          <div className="input-row">
+            <button
+              type="button"
+              className="info-toggle-standalone"
+              onClick={() => setShowClinicalDefinitions(!showClinicalDefinitions)}
+            >
+              {showClinicalDefinitions ? '▼' : '▶'} Clinical Presentation Definitions
+            </button>
+          </div>
+
+          {showClinicalDefinitions && (
+            <div className="risk-info-panel clinical-definitions-panel">
+              <h4>Clinical Presentation Classifications</h4>
+
+              {Object.entries(CLINICAL_PRESENTATION_DEFINITIONS).map(([key, def]) => (
+                <div key={key} className="clinical-definition">
+                  <h5>{def.title}</h5>
+                  <ul className="risk-factor-list">
+                    {def.criteria.map((criterion, i) => (
+                      <li key={i}>{criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
         </fieldset>
 
         {/* Bili-specific inputs */}
