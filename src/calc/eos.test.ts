@@ -13,6 +13,7 @@ describe('EOS Calculator', () => {
   describe('Default inputs (low risk case)', () => {
     it('should calculate low risk for well-appearing term infant with no risk factors', () => {
       const inputs: EOSInputs = {
+        modelVersion: '2017',
         gestationalAgeWeeks: 39,
         gestationalAgeDays: 0,
         maternalTempC: 37.0,
@@ -44,6 +45,7 @@ describe('EOS Calculator', () => {
 
     it('should significantly increase risk with high fever', () => {
       const inputs: EOSInputs = {
+        modelVersion: '2017',
         gestationalAgeWeeks: 39,
         gestationalAgeDays: 0,
         maternalTempC: 39.5,
@@ -105,6 +107,7 @@ describe('EOS Calculator', () => {
   describe('Antibiotic effects', () => {
     it('should decrease risk with adequate antibiotics', () => {
       const inputs: EOSInputs = {
+        modelVersion: '2017',
         gestationalAgeWeeks: 39,
         gestationalAgeDays: 0,
         maternalTempC: 37.0,
@@ -179,6 +182,7 @@ describe('EOS Calculator', () => {
   describe('Recommendation categories', () => {
     it('should recommend routine care for very low risk', () => {
       const inputs: EOSInputs = {
+        modelVersion: '2017',
         gestationalAgeWeeks: 40,
         gestationalAgeDays: 0,
         maternalTempC: 37.0,
@@ -196,6 +200,7 @@ describe('EOS Calculator', () => {
 
     it('should recommend empiric antibiotics for ill-appearing infant', () => {
       const inputs: EOSInputs = {
+        modelVersion: '2017',
         gestationalAgeWeeks: 39,
         gestationalAgeDays: 0,
         maternalTempC: 38.5,
