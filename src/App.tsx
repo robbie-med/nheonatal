@@ -5,6 +5,7 @@ import { InputForm } from './components/InputForm';
 import { ResultPanels } from './components/ResultPanels';
 import { SnapshotsTable } from './components/SnapshotsTable';
 import { TrendChart } from './charts/TrendChart';
+import { ThresholdTables } from './pages/ThresholdTables';
 import { useTheme } from './hooks/useTheme';
 import { usePatients } from './hooks/usePatients';
 import { useKPStatus } from './hooks/useKPStatus';
@@ -13,6 +14,8 @@ import { calculateBili, calculateBiliSync, getDefaultBiliInputs, calculateAgeHou
 import { formatEOSNote, formatBiliNote } from './format/asciiNotes';
 import { exportAllData, importData } from './storage/db';
 import { EOSInputs, EOSOutputs, BiliInputs, BiliOutputs, AppConfig } from './types';
+
+type Page = 'calculator' | 'tables';
 
 // Default config (can be overridden by /public/config.json)
 const DEFAULT_CONFIG: AppConfig = {
@@ -53,6 +56,7 @@ export function App() {
   } = usePatients();
   const { status: kpStatus, loading: kpLoading } = useKPStatus();
 
+  const [currentPage, setCurrentPage] = useState<Page>('calculator');
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [eosInputs, setEOSInputs] = useState<EOSInputs>(() =>
     getDefaultEOSInputs(DEFAULT_CONFIG.eos.baseline_incidence_per_1000)
@@ -201,6 +205,12 @@ export function App() {
     input.click();
   }, []);
 
+  // Show tables page
+  if (currentPage === 'tables') {
+    return <ThresholdTables onBack={() => setCurrentPage('calculator')} />;
+  }
+
+  // Show calculator page
   return (
     <div className="app">
       <Header
@@ -211,6 +221,7 @@ export function App() {
         kpLoading={kpLoading}
         onExport={handleExport}
         onImport={handleImport}
+        onShowTables={() => setCurrentPage('tables')}
       />
 
       <main className="main-content">

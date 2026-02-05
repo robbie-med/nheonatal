@@ -9,6 +9,7 @@ interface HeaderProps {
   kpLoading: boolean;
   onExport: () => void;
   onImport: () => void;
+  onShowTables?: () => void;
 }
 
 export function Header({
@@ -17,7 +18,8 @@ export function Header({
   kpStatus,
   kpLoading,
   onExport,
-  onImport
+  onImport,
+  onShowTables
 }: HeaderProps) {
   const statusColor = kpStatus ? getKPStatusColor(kpStatus) : 'gray';
   const statusMessage = kpStatus ? getKPStatusMessage(kpStatus) : 'Checking KP status...';
@@ -43,6 +45,15 @@ export function Header({
       </div>
 
       <div className="header-right">
+        {onShowTables && (
+          <button
+            className="tables-link"
+            onClick={onShowTables}
+            title="View AAP 2022 threshold tables"
+          >
+            AAP Tables
+          </button>
+        )}
         <button
           className="btn btn-secondary btn-sm"
           onClick={onImport}
