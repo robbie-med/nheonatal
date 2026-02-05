@@ -1,33 +1,15 @@
 /**
  * AAP 2022 Hyperbilirubinemia Calculator
- * Uses PediTools bili2022 API for threshold calculations
+ * Uses complete hour-by-hour AAP 2022 threshold data
  *
- * API Documentation: https://peditools.org/bili2022/bili2022_api.html
+ * Original API documentation: https://peditools.org/bili2022/bili2022_api.html
+ * (API disabled due to CORS - using local AAP 2022 tables)
  */
 
 import { BiliInputs, BiliOutputs, BiliApiResponse } from '../types';
+import { getPhotoThreshold, getExchangeThreshold } from './biliThresholds';
 
 const PEDITOOLS_API_BASE = 'https://peditools.org/bili2022/api/';
-
-// Local fallback thresholds (simplified AAP 2022 approximations)
-// Used when API is unavailable
-const FALLBACK_THRESHOLDS = {
-  // Phototherapy thresholds by GA category and age
-  // Format: { minGA: number, noRisk: number[], withRisk: number[] }
-  // Arrays are thresholds at 24h, 48h, 72h, 96h
-  categories: [
-    {
-      minGA: 38,
-      noRisk: [12.0, 15.0, 18.0, 19.0],
-      withRisk: [10.0, 13.0, 15.0, 17.0]
-    },
-    {
-      minGA: 35,
-      noRisk: [10.0, 13.0, 15.0, 17.0],
-      withRisk: [8.0, 11.0, 13.0, 14.0]
-    }
-  ]
-};
 
 /**
  * Calculate age in hours from birth time and sample time
@@ -47,62 +29,18 @@ function gaToDecimal(weeks: number, days: number): number {
 }
 
 /**
- * Interpolate threshold based on age
+ * Calculate local thresholds using AAP 2022 hour-by-hour data
  */
-function interpolateThreshold(ageHours: number, thresholds: number[]): number {
-  const ages = [24, 48, 72, 96];
-
-  if (ageHours <= ages[0]) {
-    // Extrapolate below 24h
-    const slope = (thresholds[1] - thresholds[0]) / (ages[1] - ages[0]);
-    return Math.max(0, thresholds[0] - slope * (ages[0] - ageHours));
-  }
-
-  if (ageHours >= ages[ages.length - 1]) {
-    return thresholds[thresholds.length - 1];
-  }
-
-  // Find bracketing points and interpolate
-  for (let i = 0; i < ages.length - 1; i++) {
-    if (ageHours >= ages[i] && ageHours <= ages[i + 1]) {
-      const t = (ageHours - ages[i]) / (ages[i + 1] - ages[i]);
-      return thresholds[i] + t * (thresholds[i + 1] - thresholds[i]);
-    }
-  }
-
-  return thresholds[thresholds.length - 1];
-}
-
-/**
- * Calculate local fallback thresholds
- */
-function calculateFallbackThresholds(
+function calculateLocalThresholds(
   gaWeeks: number,
-  gaDays: number,
+  _gaDays: number, // Included for API compatibility, GA weeks used for table lookup
   ageHours: number,
   hasRiskFactors: boolean
 ): { photo: number; exchange: number } {
-  const ga = gaToDecimal(gaWeeks, gaDays);
+  const photo = getPhotoThreshold(gaWeeks, ageHours, hasRiskFactors);
+  const exchange = getExchangeThreshold(gaWeeks, ageHours, hasRiskFactors);
 
-  // Find appropriate category
-  let category = FALLBACK_THRESHOLDS.categories[FALLBACK_THRESHOLDS.categories.length - 1];
-  for (const cat of FALLBACK_THRESHOLDS.categories) {
-    if (ga >= cat.minGA) {
-      category = cat;
-      break;
-    }
-  }
-
-  const thresholds = hasRiskFactors ? category.withRisk : category.noRisk;
-  const photo = interpolateThreshold(ageHours, thresholds);
-
-  // Exchange is typically ~5 above photo threshold
-  const exchange = photo + 5;
-
-  return {
-    photo: Math.round(photo * 10) / 10,
-    exchange: Math.round(exchange * 10) / 10
-  };
+  return { photo, exchange };
 }
 
 /**
@@ -209,27 +147,27 @@ export async function calculateBili(
       exchangeThreshold = response.exchange_threshold;
       apiResponse = response;
     } else {
-      // Fall back to local calculation
-      const fallback = calculateFallbackThresholds(
+      // Use local AAP 2022 calculation
+      const local = calculateLocalThresholds(
         gestationalAgeWeeks,
         gestationalAgeDays,
         ageHours,
         hasNeurotoxRiskFactors
       );
-      photoThreshold = fallback.photo;
-      exchangeThreshold = fallback.exchange;
+      photoThreshold = local.photo;
+      exchangeThreshold = local.exchange;
       isCached = true;
     }
   } else {
-    // Use local calculation
-    const fallback = calculateFallbackThresholds(
+    // Use local AAP 2022 calculation
+    const local = calculateLocalThresholds(
       gestationalAgeWeeks,
       gestationalAgeDays,
       ageHours,
       hasNeurotoxRiskFactors
     );
-    photoThreshold = fallback.photo;
-    exchangeThreshold = fallback.exchange;
+    photoThreshold = local.photo;
+    exchangeThreshold = local.exchange;
   }
 
   const deltaToPhoto = Math.round((tsbValue - photoThreshold) * 10) / 10;
@@ -246,24 +184,24 @@ export async function calculateBili(
 }
 
 /**
- * Calculate bili synchronously with local thresholds only
+ * Calculate bili synchronously with local AAP 2022 thresholds
  */
 export function calculateBiliSync(inputs: BiliInputs): BiliOutputs {
   const { gestationalAgeWeeks, gestationalAgeDays, ageHours, tsbValue, hasNeurotoxRiskFactors } = inputs;
 
-  const fallback = calculateFallbackThresholds(
+  const thresholds = calculateLocalThresholds(
     gestationalAgeWeeks,
     gestationalAgeDays,
     ageHours,
     hasNeurotoxRiskFactors
   );
 
-  const deltaToPhoto = Math.round((tsbValue - fallback.photo) * 10) / 10;
-  const followupGuidance = generateFollowupGuidance(tsbValue, fallback.photo, ageHours);
+  const deltaToPhoto = Math.round((tsbValue - thresholds.photo) * 10) / 10;
+  const followupGuidance = generateFollowupGuidance(tsbValue, thresholds.photo, ageHours);
 
   return {
-    photoThreshold: fallback.photo,
-    exchangeThreshold: fallback.exchange,
+    photoThreshold: thresholds.photo,
+    exchangeThreshold: thresholds.exchange,
     deltaToPhoto,
     followupGuidance,
     isCached: false

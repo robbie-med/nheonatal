@@ -614,6 +614,75 @@ body {
 }
 
 /* Responsive */
+/* Risk info panels and toggles */
+.info-toggle {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.info-toggle:hover {
+  text-decoration: underline;
+}
+
+.info-toggle-standalone {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  text-align: left;
+  width: 100%;
+}
+
+.info-toggle-standalone:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.risk-info-panel {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+
+.risk-info-panel h4 {
+  font-size: 0.9rem;
+  color: var(--bili-color);
+  margin-bottom: 0.5rem;
+}
+
+.risk-info-note {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-style: italic;
+}
+
+.risk-factor-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.risk-factor-list li {
+  margin-bottom: 0.35rem;
+  line-height: 1.4;
+}
+
+.risk-factor-list li:last-child {
+  margin-bottom: 0;
+}
+
 @media (max-width: 768px) {
   .header {
     flex-wrap: wrap;
