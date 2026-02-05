@@ -7,7 +7,8 @@ import {
 import {
   getModelInfo,
   MODEL_SELECTION_GUIDANCE,
-  CLINICAL_PRESENTATION_DEFINITIONS
+  CLINICAL_PRESENTATION_DEFINITIONS,
+  TECHNICAL_VARIANCE_NOTE
 } from '../calc/eos';
 
 interface InputFormProps {
@@ -27,6 +28,7 @@ export function InputForm({
   const [showHyperBiliRiskInfo, setShowHyperBiliRiskInfo] = useState(false);
   const [showModelGuidance, setShowModelGuidance] = useState(false);
   const [showClinicalDefinitions, setShowClinicalDefinitions] = useState(false);
+  const [showTechnicalNote, setShowTechnicalNote] = useState(false);
 
   const modelInfo = getModelInfo(eosInputs.modelVersion);
 
@@ -138,6 +140,21 @@ export function InputForm({
               </div>
 
               <p className="citation">{MODEL_SELECTION_GUIDANCE.citation}</p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="info-toggle-standalone"
+            onClick={() => setShowTechnicalNote(!showTechnicalNote)}
+          >
+            {showTechnicalNote ? '▼' : '▶'} Technical Note for Clinicians
+          </button>
+
+          {showTechnicalNote && (
+            <div className="risk-info-panel technical-note-panel">
+              <h4>Statement for Clinicians</h4>
+              <pre className="technical-note-content">{TECHNICAL_VARIANCE_NOTE}</pre>
             </div>
           )}
         </fieldset>
