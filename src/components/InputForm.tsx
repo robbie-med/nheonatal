@@ -1,4 +1,9 @@
+import { useState } from 'react';
 import { EOSInputs, BiliInputs } from '../types';
+import {
+  NEUROTOXICITY_RISK_FACTORS,
+  SIGNIFICANT_HYPERBILIRUBINEMIA_RISK_FACTORS
+} from '../calc/biliThresholds';
 
 interface InputFormProps {
   eosInputs: EOSInputs;
@@ -13,6 +18,9 @@ export function InputForm({
   onEOSChange,
   onBiliChange
 }: InputFormProps) {
+  const [showNeurotoxRiskInfo, setShowNeurotoxRiskInfo] = useState(false);
+  const [showHyperBiliRiskInfo, setShowHyperBiliRiskInfo] = useState(false);
+
   return (
     <section className="section input-form">
       <h2>Patient Data</h2>
@@ -213,12 +221,56 @@ export function InputForm({
                 checked={biliInputs.hasNeurotoxRiskFactors}
                 onChange={(e) => onBiliChange({ hasNeurotoxRiskFactors: e.target.checked })}
               />
-              Neurotoxicity risk factors present
-              <small className="help-text">
-                (isoimmune disease, G6PD deficiency, asphyxia, sepsis, acidosis, albumin &lt;3.0)
-              </small>
+              <span>
+                Neurotoxicity risk factors present
+                <button
+                  type="button"
+                  className="info-toggle"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowNeurotoxRiskInfo(!showNeurotoxRiskInfo);
+                  }}
+                  title="Show/hide neurotoxicity risk factors"
+                >
+                  {showNeurotoxRiskInfo ? '▼' : '▶'} info
+                </button>
+              </span>
             </label>
           </div>
+
+          {showNeurotoxRiskInfo && (
+            <div className="risk-info-panel">
+              <h4>Neurotoxicity Risk Factors (AAP 2022)</h4>
+              <p className="risk-info-note">Use lower thresholds if ANY of these are present:</p>
+              <ul className="risk-factor-list">
+                {NEUROTOXICITY_RISK_FACTORS.map((factor, i) => (
+                  <li key={i}>{factor}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="input-row">
+            <button
+              type="button"
+              className="info-toggle-standalone"
+              onClick={() => setShowHyperBiliRiskInfo(!showHyperBiliRiskInfo)}
+            >
+              {showHyperBiliRiskInfo ? '▼' : '▶'} Significant Hyperbilirubinemia Risk Factors
+            </button>
+          </div>
+
+          {showHyperBiliRiskInfo && (
+            <div className="risk-info-panel">
+              <h4>Significant Hyperbilirubinemia Risk Factors (AAP 2022)</h4>
+              <p className="risk-info-note">Factors that increase risk of severe hyperbilirubinemia:</p>
+              <ul className="risk-factor-list">
+                {SIGNIFICANT_HYPERBILIRUBINEMIA_RISK_FACTORS.map((factor, i) => (
+                  <li key={i}>{factor}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </fieldset>
       </div>
     </section>
