@@ -209,7 +209,6 @@ function calculateRiskAtBirth(
 
   // Get ROM adjustment (as multiplier relative to 0h)
   const romRisk = interpolate(inputs.romHours, model.romLookup, 'hours');
-  const romMultiplier = romRisk / model.baseRisk;
 
   // Get GBS multiplier
   const gbsMultiplier = model.gbsMultiplier[inputs.gbsStatus];
@@ -369,6 +368,7 @@ export function getModelInfo(version: EOSModelVersion): {
   description: string;
   gbsNote: string;
   reference: string;
+  methodology: string;
 } {
   if (version === '2024') {
     return {
@@ -376,7 +376,8 @@ export function getModelInfo(version: EOSModelVersion): {
       year: 2024,
       description: 'Modern cohort with universal GBS screening',
       gbsNote: 'GBS Unknown OR ≈ 3.1 — significant risk when status unknown',
-      reference: 'Kaiser Permanente 2024 Update'
+      reference: 'Kaiser Permanente 2024 Update',
+      methodology: 'Cohort-based'
     };
   } else {
     return {
@@ -384,7 +385,8 @@ export function getModelInfo(version: EOSModelVersion): {
       year: 2017,
       description: 'Nested case-control design',
       gbsNote: 'GBS Unknown OR ≈ 1.0 — minimal effect when status unknown',
-      reference: 'Kuzniewicz et al., JAMA Pediatrics 2017'
+      reference: 'Kuzniewicz et al., JAMA Pediatrics 2017',
+      methodology: 'Case-control'
     };
   }
 }
@@ -427,13 +429,16 @@ export const MODEL_SELECTION_GUIDANCE = {
   title: 'Which Model Should I Use?',
   recommendation2024: {
     when: 'Universal GBS screening is performed (most US hospitals)',
-    rationale: 'GBS Unknown status is rare and clinically significant (OR ≈ 3.1)'
+    rationale: 'GBS Unknown status is rare and clinically significant (OR ≈ 3.1)',
+    note: 'This is the default for most US institutions with standard prenatal care.'
   },
   recommendation2017: {
     when: 'Universal GBS screening is NOT performed',
-    rationale: 'GBS Unknown status is common and near-neutral (OR ≈ 1.0)'
+    rationale: 'GBS Unknown status is common and near-neutral (OR ≈ 1.0)',
+    note: 'Consider for settings without universal screening or limited prenatal care.'
   },
-  keyDifference: 'GBS Unknown: 2017 OR≈1.0 vs 2024 OR≈3.1'
+  keyDifference: 'GBS Unknown: 2017 OR≈1.0 vs 2024 OR≈3.1',
+  citation: 'Kuzniewicz MW, et al. Pediatrics. 2017; Kaiser Permanente 2024 Update'
 };
 
 /**

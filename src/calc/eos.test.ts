@@ -312,13 +312,14 @@ describe('EOS Calculator', () => {
         gestationalAgeDays: 0,
         maternalTempC: 36.67, // 98°F
         romHours: 0,
+        gbsStatus: 'negative',
         antibioticType: 'none',
         antibioticDuration: 'none',
         clinicalExam: 'well',
         baselineIncidence: 0.5
       };
 
-      const gbsNeg = calculateEOS({ ...baseInputs, gbsStatus: 'negative' });
+      const gbsNeg = calculateEOS(baseInputs);
       const gbsUnk = calculateEOS({ ...baseInputs, gbsStatus: 'unknown' });
 
       // KP shows: Neg=0.07, Unk=0.22 → ratio ≈ 3.14
@@ -354,13 +355,14 @@ describe('EOS Calculator', () => {
         gestationalAgeDays: 0,
         maternalTempC: 36.67, // 98°F
         romHours: 0,
+        gbsStatus: 'negative',
         antibioticType: 'none',
         antibioticDuration: 'none',
         clinicalExam: 'well',
         baselineIncidence: 0.5
       };
 
-      const gbsNeg = calculateEOS({ ...baseInputs, gbsStatus: 'negative' });
+      const gbsNeg = calculateEOS(baseInputs);
       const gbsUnk = calculateEOS({ ...baseInputs, gbsStatus: 'unknown' });
 
       // KP shows: Neg=0.02, Unk=0.02 → ratio ≈ 1.0
