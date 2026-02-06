@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kaiser Permanente EOS Calculator Data Collection Script (FIXED)
+Kaiser Permanente EOS Calculator Data Collection Script (v3 - AJAX Fixed)
 
 AUTHORIZATION: Kaiser Permanente Legal Dept, Feb 5, 2026
 - Max 5 requests/minute (we use 1 per 15 seconds = 4/min)
@@ -24,8 +24,9 @@ from typing import Optional, Tuple
 BASE_URL = "https://neonatalsepsiscalculator.kaiserpermanente.org/InfectionProbabilityCalculator.aspx"
 OUTPUT_FILE = "kp-eos-data.csv"
 
-# Incidence values from the dropdown (these are log-odds adjustments)
-INCIDENCE_VALUES = {
+# Incidence values - DIFFERENT for 2017 vs 2024 models!
+# 2017 model uses these values (from original page):
+INCIDENCE_2017 = {
     "0.1": "38.952265",
     "0.2": "39.646367",
     "0.3": "40.05280",   # KPNC incidence
@@ -40,14 +41,26 @@ INCIDENCE_VALUES = {
     "4.0": "42.676976",
 }
 
-# Test vectors - systematic permutation of key variables
-# Format: (Model, GA_weeks, GA_days, Temp_F, ROM_hours, GBS, Antibiotics, Incidence)
-# Model: "2017" or "2024"
-# GBS: "Negative", "Positive", "Unknown"
-# Antibiotics: "broad4", "broad2", "gbs2", "none"
-# Incidence: "0.5" (CDC national - we'll use this as baseline)
+# 2024 model uses different incidence values (from AJAX request)
+INCIDENCE_2024 = {
+    "0.1": "55.2",
+    "0.2": "55.9",
+    "0.3": "56.3",
+    "0.4": "56.6",
+    "0.5": "57.9",   # CDC national - from working request
+    "0.6": "57.0",
+    "0.7": "57.2",
+    "0.8": "57.3",
+    "0.9": "57.5",
+    "1.0": "57.6",
+    "2.0": "58.3",
+    "4.0": "59.0",
+}
 
+# Test vectors - systematic permutation of key variables
 TEST_CASES = [
+    # Format: (Model, GA_weeks, GA_days, Temp_F, ROM_hours, GBS, Antibiotics, Incidence)
+
     # === BASE CASES (isolate intercept) ===
     ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
@@ -68,7 +81,7 @@ TEST_CASES = [
     ("2024", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
 
-    # === ROM SENSITIVITY ===
+    # === ROM SENSITIVITY (2017) ===
     ("2017", 40, 0, 98.0, 6, "Negative", "none", "0.5"),
     ("2017", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
     ("2017", 40, 0, 98.0, 18, "Negative", "none", "0.5"),
@@ -77,13 +90,17 @@ TEST_CASES = [
     ("2017", 40, 0, 98.0, 48, "Negative", "none", "0.5"),
     ("2017", 40, 0, 98.0, 72, "Negative", "none", "0.5"),
 
+    # === ROM SENSITIVITY (2024) ===
+    ("2024", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 24, "Negative", "none", "0.5"),
+
     # === GBS STATUS (KEY DIFFERENCE BETWEEN MODELS) ===
     ("2017", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
     ("2017", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
 
-    # === GESTATIONAL AGE ===
+    # === GESTATIONAL AGE (2017) ===
     ("2017", 34, 0, 98.0, 0, "Negative", "none", "0.5"),
     ("2017", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
     ("2017", 36, 0, 98.0, 0, "Negative", "none", "0.5"),
@@ -93,14 +110,21 @@ TEST_CASES = [
     ("2017", 41, 0, 98.0, 0, "Negative", "none", "0.5"),
     ("2017", 42, 0, 98.0, 0, "Negative", "none", "0.5"),
 
-    # === GA with days (check granularity) ===
+    # === GESTATIONAL AGE (2024) ===
+    ("2024", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
+
+    # === GA with days ===
     ("2017", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
     ("2024", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
 
-    # === ANTIBIOTICS ===
+    # === ANTIBIOTICS (2017) ===
     ("2017", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
     ("2017", 40, 0, 98.0, 0, "Positive", "broad2", "0.5"),
     ("2017", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
+
+    # === ANTIBIOTICS (2024) ===
     ("2024", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
 
@@ -108,11 +132,11 @@ TEST_CASES = [
     ("2017", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
     ("2024", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
 
-    # === GBS UNKNOWN HIGH RISK (key 2017 vs 2024 difference) ===
+    # === GBS UNKNOWN HIGH RISK (key difference) ===
     ("2017", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
     ("2024", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
 
-    # === INCIDENCE SENSITIVITY (to verify intercept adjustment) ===
+    # === INCIDENCE SENSITIVITY ===
     ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.3"),
     ("2017", 40, 0, 98.0, 0, "Negative", "none", "1.0"),
 ]
@@ -123,8 +147,11 @@ class KPScraper:
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.5',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-MicrosoftAjax': 'Delta=true',
             'Connection': 'keep-alive',
         })
         self.delay_seconds = delay_seconds
@@ -136,7 +163,12 @@ class KPScraper:
     def get_initial_page(self) -> bool:
         """Fetch initial page to get VIEWSTATE and other hidden fields."""
         try:
-            response = self.session.get(BASE_URL, verify=self.verify_ssl)
+            # Use standard headers for initial GET
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            }
+            response = self.session.get(BASE_URL, verify=self.verify_ssl, headers=headers)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -157,63 +189,76 @@ class KPScraper:
             return False
 
     def submit_calculation(self, case: tuple) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
-        """Submit calculation and return (risk_at_birth, well_appearing, equivocal, clinical_illness, raw_html)."""
+        """Submit calculation using AJAX UpdatePanel and return results."""
         model, ga_w, ga_d, temp_f, rom, gbs, abx, incidence = case
 
         # Map GBS to hidden radio button value
         gbs_map = {
-            "Negative": ("rbGBSHidden1", "rbGBSHidden1"),
-            "Positive": ("rbGBSHidden2", "rbGBSHidden2"),
-            "Unknown": ("rbGBSHidden3", "rbGBSHidden3"),
+            "Negative": "rbGBSHidden1",
+            "Positive": "rbGBSHidden2",
+            "Unknown": "rbGBSHidden3",
         }
 
         # Map Antibiotics to hidden radio button value
         abx_map = {
-            "broad4": ("rbIntraHidden1", "rbIntraHidden1"),  # Broad spectrum > 4 hrs
-            "broad2": ("rbIntraHidden2", "rbIntraHidden2"),  # Broad spectrum 2-3.9 hrs
-            "gbs2": ("rbIntraHidden3", "rbIntraHidden3"),    # GBS specific > 2 hrs
-            "none": ("rbIntraHidden4", "rbIntraHidden4"),    # No antibiotics or < 2 hrs
+            "broad4": "rbIntraHidden1",  # Broad spectrum > 4 hrs
+            "broad2": "rbIntraHidden2",  # Broad spectrum 2-3.9 hrs
+            "gbs2": "rbIntraHidden3",    # GBS specific > 2 hrs
+            "none": "rbIntraHidden4",    # No antibiotics or < 2 hrs
         }
 
         # Map model to hidden radio button
         model_map = {
-            "2017": ("rbUSAHidden1", "rbUSAHidden1"),
-            "2024": ("rbUSAHidden2", "rbUSAHidden2"),
+            "2017": "rbUSAHidden1",
+            "2024": "rbUSAHidden2",
         }
 
-        # Build form data with CORRECT field names
+        # Get correct incidence value based on model
+        if model == "2024":
+            incidence_value = INCIDENCE_2024.get(incidence, "57.9")
+        else:
+            incidence_value = INCIDENCE_2017.get(incidence, "40.56560")
+
+        # Build form data for AJAX UpdatePanel
         prefix = "ctl00$MainContent$InfectionProbabilityCalculations$"
 
         form_data = {
+            # AJAX-specific fields
+            'ctl00$ctl08': f'{prefix}UpdatePanel1|{prefix}btnCalc',
+            '__ASYNCPOST': 'true',
+
+            # Hidden fields
             '__EVENTTARGET': '',
             '__EVENTARGUMENT': '',
-            '__LASTFOCUS': '',
             '__VIEWSTATE': self.viewstate,
             '__VIEWSTATEGENERATOR': self.viewstate_generator,
             '__EVENTVALIDATION': self.event_validation,
 
             # Calculator Version (2017 or 2024)
-            f'{prefix}rbUU': model_map[model][0],
+            f'{prefix}rbUU': model_map[model],
+            'flexRadioUSA': 'on',
 
             # Incidence dropdown
-            f'{prefix}ddlIncidence': INCIDENCE_VALUES[incidence],
+            f'{prefix}ddlIncidence': incidence_value,
 
             # Gestational Age
             f'{prefix}txtGestational': str(ga_w),
             f'{prefix}txtDays': str(ga_d),
 
-            # Temperature
-            f'{prefix}txtTemperature': f'{temp_f:.1f}',
+            # Temperature (use integer for whole numbers to avoid validation error)
+            f'{prefix}txtTemperature': str(int(temp_f)) if temp_f == int(temp_f) else f'{temp_f:.1f}',
             f'{prefix}ddlFarCal': 'F',
 
             # ROM
             f'{prefix}txtROM': str(rom),
 
             # GBS Status
-            f'{prefix}rbGG': gbs_map[gbs][0],
+            f'{prefix}rbGG': gbs_map[gbs],
+            'flexRadioGBS': 'on',
 
             # Antibiotics
-            f'{prefix}rbMM': abx_map[abx][0],
+            f'{prefix}rbMM': abx_map[abx],
+            'flexRadioIntra': 'on',
 
             # Submit button
             f'{prefix}btnCalc': 'Calculate »',
@@ -223,72 +268,71 @@ class KPScraper:
             response = self.session.post(BASE_URL, data=form_data, verify=self.verify_ssl)
             response.raise_for_status()
 
-            # Update viewstate for next request
-            soup = BeautifulSoup(response.text, 'html.parser')
-
-            vs = soup.find('input', {'name': '__VIEWSTATE'})
-            ev = soup.find('input', {'name': '__EVENTVALIDATION'})
-            if vs:
-                self.viewstate = vs['value']
-            if ev:
-                self.event_validation = ev['value']
-
-            # Parse results
-            return self._parse_response(response.text, soup)
+            # Parse AJAX response (pipe-delimited format)
+            return self._parse_ajax_response(response.text)
 
         except Exception as e:
             print(f"  ERROR: {e}")
             return None, None, None, None, str(e)
 
-    def _parse_response(self, html: str, soup: BeautifulSoup) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
-        """Parse the response HTML to extract risk values."""
+    def _parse_ajax_response(self, response_text: str) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
+        """Parse ASP.NET AJAX UpdatePanel response (pipe-delimited format)."""
 
         risk_birth = None
         well_appearing = None
         equivocal = None
         clinical_illness = None
+        debug_info = ""
 
-        # Find the specific label elements by their IDs
-        # EOS Risk at Birth
-        lbl_eos = soup.find(id='MainContent_InfectionProbabilityCalculations_lblEOS')
-        if lbl_eos and lbl_eos.get_text(strip=True):
+        # The AJAX response is pipe-delimited with updatePanel sections
+        # Extract the HTML content from UpdatePanel3 (results section)
+
+        # Look for lblEOS value in response
+        eos_match = re.search(r'lblEOS[^>]*>([0-9.]+)<', response_text)
+        if eos_match:
             try:
-                risk_birth = float(lbl_eos.get_text(strip=True))
+                risk_birth = float(eos_match.group(1))
             except ValueError:
                 pass
 
-        # Well Appearing
-        lbl_well = soup.find(id='MainContent_InfectionProbabilityCalculations_lblWellAppearing')
-        if lbl_well and lbl_well.get_text(strip=True):
+        # Look for lblWellAppearing value
+        well_match = re.search(r'lblWellAppearing"[^>]*>([0-9.]+)<', response_text)
+        if well_match:
             try:
-                well_appearing = float(lbl_well.get_text(strip=True))
+                well_appearing = float(well_match.group(1))
             except ValueError:
                 pass
 
-        # Equivocal
-        lbl_equi = soup.find(id='MainContent_InfectionProbabilityCalculations_lblEquivocal')
-        if lbl_equi and lbl_equi.get_text(strip=True):
+        # Look for lblEquivocal value
+        equi_match = re.search(r'lblEquivocal"[^>]*>([0-9.]+)<', response_text)
+        if equi_match:
             try:
-                equivocal = float(lbl_equi.get_text(strip=True))
+                equivocal = float(equi_match.group(1))
             except ValueError:
                 pass
 
-        # Clinical Illness
-        lbl_clin = soup.find(id='MainContent_InfectionProbabilityCalculations_lblClinical')
-        if lbl_clin and lbl_clin.get_text(strip=True):
+        # Look for lblClinical value
+        clin_match = re.search(r'lblClinical"[^>]*>([0-9.]+)<', response_text)
+        if clin_match:
             try:
-                clinical_illness = float(lbl_clin.get_text(strip=True))
+                clinical_illness = float(clin_match.group(1))
             except ValueError:
                 pass
 
-        # Check for validation errors
-        errors = soup.find_all(class_='ErrorMessage')
-        error_texts = []
-        for err in errors:
-            if err.get('style') != 'display:none;' and err.get_text(strip=True):
-                error_texts.append(err.get_text(strip=True))
+        # Update viewstate from response for next request
+        vs_match = re.search(r'\|__VIEWSTATE\|([^|]+)\|', response_text)
+        if vs_match:
+            self.viewstate = vs_match.group(1)
 
-        debug_info = "; ".join(error_texts) if error_texts else ""
+        ev_match = re.search(r'\|__EVENTVALIDATION\|([^|]+)\|', response_text)
+        if ev_match:
+            self.event_validation = ev_match.group(1)
+
+        # Check for errors in response
+        if 'ErrorMessage' in response_text and 'display:none' not in response_text:
+            error_match = re.search(r'class="ErrorMessage"[^>]*>([^<]+)', response_text)
+            if error_match:
+                debug_info = error_match.group(1).strip()
 
         return risk_birth, well_appearing, equivocal, clinical_illness, debug_info
 
@@ -308,7 +352,7 @@ def main():
         print("WARNING: SSL certificate verification disabled")
 
     print("=" * 60)
-    print("Kaiser Permanente EOS Calculator Scraper (FIXED)")
+    print("Kaiser Permanente EOS Calculator Scraper (v3 - AJAX)")
     print("Authorization: KP Legal Dept, Feb 5, 2026")
     print(f"Rate Limit: 1 request per {args.delay} seconds")
     print("=" * 60)
@@ -374,10 +418,11 @@ def main():
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ])
 
-        # Save debug HTML for first few cases
-        if i < 3:
-            with open(f'debug_response_{case_num}.html', 'w', encoding='utf-8') as f:
-                f.write(debug if len(debug) > 1000 else f"Risk: {risk_birth}, Well: {well_appearing}, Equi: {equivocal}, Clin: {clinical_illness}")
+        # Save debug response for troubleshooting
+        if i < 3 or risk_birth is None:
+            with open(f'debug_response_{case_num}.txt', 'w', encoding='utf-8') as f:
+                f.write(f"Risk: {risk_birth}, Well: {well_appearing}, Equi: {equivocal}, Clin: {clinical_illness}\n")
+                f.write(f"Debug: {debug}\n")
 
         if risk_birth is not None:
             print(f"  -> Birth: {risk_birth} | Well: {well_appearing} | Equi: {equivocal} | Clin: {clinical_illness}")
