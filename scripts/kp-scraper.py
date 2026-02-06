@@ -17,6 +17,7 @@ import csv
 import time
 import re
 import argparse
+import urllib3
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -118,7 +119,7 @@ TEST_CASES = [
 
 
 class KPScraper:
-    def __init__(self, delay_seconds: int = 15):
+    def __init__(self, delay_seconds: int = 15, verify_ssl: bool = True):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -127,6 +128,7 @@ class KPScraper:
             'Connection': 'keep-alive',
         })
         self.delay_seconds = delay_seconds
+        self.verify_ssl = verify_ssl
         self.viewstate = None
         self.viewstate_generator = None
         self.event_validation = None
@@ -134,7 +136,7 @@ class KPScraper:
     def get_initial_page(self) -> bool:
         """Fetch initial page to get VIEWSTATE and other hidden fields."""
         try:
-            response = self.session.get(BASE_URL)
+            response = self.session.get(BASE_URL, verify=self.verify_ssl)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -218,7 +220,7 @@ class KPScraper:
         }
 
         try:
-            response = self.session.post(BASE_URL, data=form_data)
+            response = self.session.post(BASE_URL, data=form_data, verify=self.verify_ssl)
             response.raise_for_status()
 
             # Update viewstate for next request
@@ -297,7 +299,13 @@ def main():
     parser.add_argument('--resume', action='store_true', help='Resume from last position')
     parser.add_argument('--delay', type=int, default=15, help='Delay between requests (seconds)')
     parser.add_argument('--output', type=str, default=OUTPUT_FILE, help='Output CSV file')
+    parser.add_argument('--no-verify-ssl', action='store_true', help='Disable SSL certificate verification (for Windows)')
     args = parser.parse_args()
+
+    # Disable SSL warnings if verification is disabled
+    if args.no_verify_ssl:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        print("WARNING: SSL certificate verification disabled")
 
     print("=" * 60)
     print("Kaiser Permanente EOS Calculator Scraper (FIXED)")
@@ -336,7 +344,7 @@ def main():
     print()
 
     # Initialize scraper
-    scraper = KPScraper(delay_seconds=args.delay)
+    scraper = KPScraper(delay_seconds=args.delay, verify_ssl=not args.no_verify_ssl)
 
     print("Fetching initial page state...")
     if not scraper.get_initial_page():
