@@ -61,84 +61,95 @@ INCIDENCE_2024 = {
 TEST_CASES = [
     # Format: (Model, GA_weeks, GA_days, Temp_F, ROM_hours, GBS, Antibiotics, Incidence)
 
-    # === BASE CASES (isolate intercept) ===
-    ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
+    # ============================================================
+    # 2024 MODEL - COMPREHENSIVE TEST CASES
+    # ============================================================
+
+    # === 2024 BASE CASE ===
     ("2024", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
 
-    # === TEMPERATURE SENSITIVITY (2017 model) ===
-    ("2017", 40, 0, 98.5, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 99.0, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 99.5, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 100.0, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 100.5, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 101.5, 0, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
-
-    # === TEMPERATURE SENSITIVITY (2024 model) ===
+    # === 2024 TEMPERATURE SENSITIVITY ===
+    ("2024", 40, 0, 98.5, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 99.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 99.5, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 100.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 100.5, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 101.5, 0, "Negative", "none", "0.5"),
     ("2024", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
 
-    # === ROM SENSITIVITY (2017) ===
-    ("2017", 40, 0, 98.0, 6, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 18, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 24, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 36, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 48, "Negative", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 72, "Negative", "none", "0.5"),
-
-    # === ROM SENSITIVITY (2024) ===
+    # === 2024 ROM SENSITIVITY ===
+    ("2024", 40, 0, 98.0, 6, "Negative", "none", "0.5"),
     ("2024", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 18, "Negative", "none", "0.5"),
     ("2024", 40, 0, 98.0, 24, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 36, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 48, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 72, "Negative", "none", "0.5"),
 
-    # === GBS STATUS (KEY DIFFERENCE BETWEEN MODELS) ===
-    ("2017", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
-    ("2017", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
+    # === 2024 GESTATIONAL AGE ===
+    ("2024", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 36, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 38, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 41, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 42, 0, 98.0, 0, "Negative", "none", "0.5"),
+
+    # === 2024 GA with days ===
+    ("2024", 37, 3, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 3, 98.0, 0, "Negative", "none", "0.5"),
+
+    # === 2024 GBS STATUS (KEY - Unknown should be higher than 2017) ===
     ("2024", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
 
-    # === GESTATIONAL AGE (2017) ===
-    ("2017", 34, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 36, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 38, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 41, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2017", 42, 0, 98.0, 0, "Negative", "none", "0.5"),
-
-    # === GESTATIONAL AGE (2024) ===
-    ("2024", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2024", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
-    ("2024", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
-
-    # === GA with days ===
-    ("2017", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
-    ("2024", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
-
-    # === ANTIBIOTICS (2017) ===
-    ("2017", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
-    ("2017", 40, 0, 98.0, 0, "Positive", "broad2", "0.5"),
-    ("2017", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
-
-    # === ANTIBIOTICS (2024) ===
+    # === 2024 ANTIBIOTICS ===
     ("2024", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Positive", "broad2", "0.5"),
     ("2024", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
 
-    # === COMBINED HIGH RISK ===
-    ("2017", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
+    # === 2024 COMBINED SCENARIOS ===
     ("2024", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
-
-    # === GBS UNKNOWN HIGH RISK (key difference) ===
-    ("2017", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
     ("2024", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
+    ("2024", 37, 0, 100.5, 12, "Negative", "none", "0.5"),
+    ("2024", 39, 0, 99.5, 6, "Positive", "none", "0.5"),
 
-    # === INCIDENCE SENSITIVITY ===
-    ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.3"),
-    ("2017", 40, 0, 98.0, 0, "Negative", "none", "1.0"),
+    # === 2024 HIGH RISK COMBINATIONS ===
+    ("2024", 35, 0, 102.0, 48, "Positive", "none", "0.5"),
+    ("2024", 36, 0, 101.0, 36, "Unknown", "none", "0.5"),
+
+    # ============================================================
+    # 2017 MODEL - KEY COMPARISON CASES
+    # ============================================================
+
+    # === 2017 BASE CASE ===
+    ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
+
+    # === 2017 TEMPERATURE (for comparison) ===
+    ("2017", 40, 0, 99.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 100.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
+
+    # === 2017 ROM (for comparison) ===
+    ("2017", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 24, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 48, "Negative", "none", "0.5"),
+
+    # === 2017 GA (for comparison) ===
+    ("2017", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
+
+    # === 2017 GBS (KEY COMPARISON - Unknown should be ~same as Negative) ===
+    ("2017", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
+
+    # === 2017 COMBINED for comparison ===
+    ("2017", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
+    ("2017", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
 ]
 
 
