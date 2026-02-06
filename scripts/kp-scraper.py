@@ -188,9 +188,56 @@ class KPScraper:
             print(f"ERROR fetching initial page: {e}")
             return False
 
+    def select_model(self, model: str) -> bool:
+        """Select the model version (2017 or 2024) - triggers form update."""
+        prefix = "ctl00$MainContent$InfectionProbabilityCalculations$"
+
+        model_map = {
+            "2017": "rbUSAHidden1",
+            "2024": "rbUSAHidden2",
+        }
+
+        # Trigger model selection postback
+        form_data = {
+            'ctl00$ctl08': f'{prefix}UpdatePanel4|{prefix}btnUSA',
+            '__ASYNCPOST': 'true',
+            '__EVENTTARGET': '',
+            '__EVENTARGUMENT': '',
+            '__VIEWSTATE': self.viewstate,
+            '__VIEWSTATEGENERATOR': self.viewstate_generator,
+            '__EVENTVALIDATION': self.event_validation,
+            f'{prefix}rbUU': model_map[model],
+            'flexRadioUSA': 'on',
+            f'{prefix}btnUSA': '',
+        }
+
+        try:
+            response = self.session.post(BASE_URL, data=form_data, verify=self.verify_ssl)
+            response.raise_for_status()
+
+            # Update viewstate from response
+            vs_match = re.search(r'\|__VIEWSTATE\|([^|]+)\|', response.text)
+            if vs_match:
+                self.viewstate = vs_match.group(1)
+
+            ev_match = re.search(r'\|__EVENTVALIDATION\|([^|]+)\|', response.text)
+            if ev_match:
+                self.event_validation = ev_match.group(1)
+
+            return True
+        except Exception as e:
+            print(f"  ERROR selecting model: {e}")
+            return False
+
     def submit_calculation(self, case: tuple) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
         """Submit calculation using AJAX UpdatePanel and return results."""
         model, ga_w, ga_d, temp_f, rom, gbs, abx, incidence = case
+
+        # For 2024 model, first trigger model selection postback
+        if model == "2024":
+            if not self.select_model("2024"):
+                return None, None, None, None, "Failed to select 2024 model"
+            time.sleep(0.5)  # Brief pause after model switch
 
         # Map GBS to hidden radio button value
         gbs_map = {
