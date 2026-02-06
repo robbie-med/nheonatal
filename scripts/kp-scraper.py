@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kaiser Permanente EOS Calculator Data Collection Script
+Kaiser Permanente EOS Calculator Data Collection Script (FIXED)
 
 AUTHORIZATION: Kaiser Permanente Legal Dept, Feb 5, 2026
 - Max 5 requests/minute (we use 1 per 15 seconds = 4/min)
@@ -18,85 +18,102 @@ import time
 import re
 import argparse
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Optional, Tuple
 
 BASE_URL = "https://neonatalsepsiscalculator.kaiserpermanente.org/InfectionProbabilityCalculator.aspx"
 OUTPUT_FILE = "kp-eos-data.csv"
 
-# Test vectors - systematic permutation of key variables
-TEST_CASES = [
-    # Format: (Model, GA_weeks, GA_days, Temp_F, ROM_hours, GBS, Abx_type, Abx_duration, Clinical)
+# Incidence values from the dropdown (these are log-odds adjustments)
+INCIDENCE_VALUES = {
+    "0.1": "38.952265",
+    "0.2": "39.646367",
+    "0.3": "40.05280",   # KPNC incidence
+    "0.4": "40.34150",
+    "0.5": "40.56560",   # CDC national incidence
+    "0.6": "40.74890",
+    "0.7": "40.903919",
+    "0.8": "41.0384",
+    "0.9": "41.1571",
+    "1.0": "41.263432",
+    "2.0": "41.965852",
+    "4.0": "42.676976",
+}
 
+# Test vectors - systematic permutation of key variables
+# Format: (Model, GA_weeks, GA_days, Temp_F, ROM_hours, GBS, Antibiotics, Incidence)
+# Model: "2017" or "2024"
+# GBS: "Negative", "Positive", "Unknown"
+# Antibiotics: "broad4", "broad2", "gbs2", "none"
+# Incidence: "0.5" (CDC national - we'll use this as baseline)
+
+TEST_CASES = [
     # === BASE CASES (isolate intercept) ===
-    ("2017", 40, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
+    ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Negative", "none", "0.5"),
 
     # === TEMPERATURE SENSITIVITY (2017 model) ===
-    ("2017", 40, 0, 98.5, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 99.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 99.5, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 100.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 100.5, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 101.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 101.5, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 102.0, 0, "Negative", "None", "", "Well Appearing"),
+    ("2017", 40, 0, 98.5, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 99.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 99.5, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 100.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 100.5, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 101.5, 0, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
 
     # === TEMPERATURE SENSITIVITY (2024 model) ===
-    ("2024", 40, 0, 99.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 100.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 101.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 102.0, 0, "Negative", "None", "", "Well Appearing"),
+    ("2024", 40, 0, 99.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 100.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 101.0, 0, "Negative", "none", "0.5"),
+    ("2024", 40, 0, 102.0, 0, "Negative", "none", "0.5"),
 
     # === ROM SENSITIVITY ===
-    ("2017", 40, 0, 98.0, 6, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 12, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 18, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 24, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 36, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 48, "Negative", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 72, "Negative", "None", "", "Well Appearing"),
+    ("2017", 40, 0, 98.0, 6, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 12, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 18, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 24, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 36, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 48, "Negative", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 72, "Negative", "none", "0.5"),
 
     # === GBS STATUS (KEY DIFFERENCE BETWEEN MODELS) ===
-    ("2017", 40, 0, 98.0, 0, "Positive", "None", "", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 0, "Unknown", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 98.0, 0, "Positive", "None", "", "Well Appearing"),
-    ("2024", 40, 0, 98.0, 0, "Unknown", "None", "", "Well Appearing"),
+    ("2017", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
+    ("2017", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Positive", "none", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Unknown", "none", "0.5"),
 
     # === GESTATIONAL AGE ===
-    ("2017", 34, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 35, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 36, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 37, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 38, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 39, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 41, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2017", 42, 0, 98.0, 0, "Negative", "None", "", "Well Appearing"),
+    ("2017", 34, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 35, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 36, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 37, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 38, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 39, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 41, 0, 98.0, 0, "Negative", "none", "0.5"),
+    ("2017", 42, 0, 98.0, 0, "Negative", "none", "0.5"),
 
     # === GA with days (check granularity) ===
-    ("2017", 39, 3, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-    ("2024", 39, 3, 98.0, 0, "Negative", "None", "", "Well Appearing"),
-
-    # === CLINICAL EXAM (Likelihood Ratios) ===
-    ("2017", 40, 0, 100.0, 0, "Negative", "None", "", "Equivocal"),
-    ("2017", 40, 0, 100.0, 0, "Negative", "None", "", "Clinical Illness"),
-    ("2024", 40, 0, 100.0, 0, "Negative", "None", "", "Equivocal"),
-    ("2024", 40, 0, 100.0, 0, "Negative", "None", "", "Clinical Illness"),
+    ("2017", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
+    ("2024", 39, 3, 98.0, 0, "Negative", "none", "0.5"),
 
     # === ANTIBIOTICS ===
-    ("2017", 40, 0, 98.0, 0, "Positive", "GBS Specific", "Broad Spectrum >= 4 hrs prior to delivery", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 0, "Positive", "GBS Specific", "GBS Specific >= 2 hrs prior to delivery", "Well Appearing"),
-    ("2017", 40, 0, 98.0, 0, "Positive", "Broad Spectrum", "Broad Spectrum >= 4 hrs prior to delivery", "Well Appearing"),
+    ("2017", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
+    ("2017", 40, 0, 98.0, 0, "Positive", "broad2", "0.5"),
+    ("2017", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Positive", "broad4", "0.5"),
+    ("2024", 40, 0, 98.0, 0, "Positive", "gbs2", "0.5"),
 
     # === COMBINED HIGH RISK ===
-    ("2017", 35, 0, 101.0, 24, "Positive", "None", "", "Well Appearing"),
-    ("2017", 35, 0, 101.0, 24, "Positive", "None", "", "Equivocal"),
-    ("2017", 35, 0, 101.0, 24, "Positive", "None", "", "Clinical Illness"),
-    ("2024", 35, 0, 101.0, 24, "Positive", "None", "", "Well Appearing"),
-    ("2024", 35, 0, 101.0, 24, "Positive", "None", "", "Clinical Illness"),
+    ("2017", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
+    ("2024", 35, 0, 101.0, 24, "Positive", "none", "0.5"),
 
     # === GBS UNKNOWN HIGH RISK (key 2017 vs 2024 difference) ===
-    ("2017", 38, 0, 100.0, 18, "Unknown", "None", "", "Well Appearing"),
-    ("2024", 38, 0, 100.0, 18, "Unknown", "None", "", "Well Appearing"),
+    ("2017", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
+    ("2024", 38, 0, 100.0, 18, "Unknown", "none", "0.5"),
+
+    # === INCIDENCE SENSITIVITY (to verify intercept adjustment) ===
+    ("2017", 40, 0, 98.0, 0, "Negative", "none", "0.3"),
+    ("2017", 40, 0, 98.0, 0, "Negative", "none", "1.0"),
 ]
 
 
@@ -104,8 +121,10 @@ class KPScraper:
     def __init__(self, delay_seconds: int = 15):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
         })
         self.delay_seconds = delay_seconds
         self.viewstate = None
@@ -135,29 +154,68 @@ class KPScraper:
             print(f"ERROR fetching initial page: {e}")
             return False
 
-    def submit_calculation(self, case: tuple) -> Tuple[Optional[float], Optional[float], str]:
-        """Submit calculation and return (risk_at_birth, risk_posterior, recommendation)."""
-        model, ga_w, ga_d, temp_f, rom, gbs, abx_type, abx_dur, clinical = case
+    def submit_calculation(self, case: tuple) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
+        """Submit calculation and return (risk_at_birth, well_appearing, equivocal, clinical_illness, raw_html)."""
+        model, ga_w, ga_d, temp_f, rom, gbs, abx, incidence = case
+
+        # Map GBS to hidden radio button value
+        gbs_map = {
+            "Negative": ("rbGBSHidden1", "rbGBSHidden1"),
+            "Positive": ("rbGBSHidden2", "rbGBSHidden2"),
+            "Unknown": ("rbGBSHidden3", "rbGBSHidden3"),
+        }
+
+        # Map Antibiotics to hidden radio button value
+        abx_map = {
+            "broad4": ("rbIntraHidden1", "rbIntraHidden1"),  # Broad spectrum > 4 hrs
+            "broad2": ("rbIntraHidden2", "rbIntraHidden2"),  # Broad spectrum 2-3.9 hrs
+            "gbs2": ("rbIntraHidden3", "rbIntraHidden3"),    # GBS specific > 2 hrs
+            "none": ("rbIntraHidden4", "rbIntraHidden4"),    # No antibiotics or < 2 hrs
+        }
+
+        # Map model to hidden radio button
+        model_map = {
+            "2017": ("rbUSAHidden1", "rbUSAHidden1"),
+            "2024": ("rbUSAHidden2", "rbUSAHidden2"),
+        }
+
+        # Build form data with CORRECT field names
+        prefix = "ctl00$MainContent$InfectionProbabilityCalculations$"
 
         form_data = {
             '__EVENTTARGET': '',
             '__EVENTARGUMENT': '',
+            '__LASTFOCUS': '',
             '__VIEWSTATE': self.viewstate,
             '__VIEWSTATEGENERATOR': self.viewstate_generator,
             '__EVENTVALIDATION': self.event_validation,
-            'ctl00$phContent$ddlSepsisModel': model,
-            'ctl00$phContent$ddlGA_Weeks': str(ga_w),
-            'ctl00$phContent$ddlGA_Days': str(ga_d),
-            'ctl00$phContent$txtHighestMaternalAntepartumTemperature': f'{temp_f:.1f}',
-            'ctl00$phContent$txtRuptureOfMembranesHrs': str(rom),
-            'ctl00$phContent$ddlGBS': gbs,
-            'ctl00$phContent$ddlAntibiotics': abx_type,
-            'ctl00$phContent$ddlClinicalPresentation': clinical,
-            'ctl00$phContent$btnCalculate': 'Calculate',
-        }
 
-        if abx_type != 'None' and abx_dur:
-            form_data['ctl00$phContent$ddlAntibioticDuration'] = abx_dur
+            # Calculator Version (2017 or 2024)
+            f'{prefix}rbUU': model_map[model][0],
+
+            # Incidence dropdown
+            f'{prefix}ddlIncidence': INCIDENCE_VALUES[incidence],
+
+            # Gestational Age
+            f'{prefix}txtGestational': str(ga_w),
+            f'{prefix}txtDays': str(ga_d),
+
+            # Temperature
+            f'{prefix}txtTemperature': f'{temp_f:.1f}',
+            f'{prefix}ddlFarCal': 'F',
+
+            # ROM
+            f'{prefix}txtROM': str(rom),
+
+            # GBS Status
+            f'{prefix}rbGG': gbs_map[gbs][0],
+
+            # Antibiotics
+            f'{prefix}rbMM': abx_map[abx][0],
+
+            # Submit button
+            f'{prefix}btnCalc': 'Calculate »',
+        }
 
         try:
             response = self.session.post(BASE_URL, data=form_data)
@@ -174,72 +232,82 @@ class KPScraper:
                 self.event_validation = ev['value']
 
             # Parse results
-            return self._parse_response(response.text)
+            return self._parse_response(response.text, soup)
 
         except Exception as e:
             print(f"  ERROR: {e}")
-            return None, None, str(e)
+            return None, None, None, None, str(e)
 
-    def _parse_response(self, html: str) -> Tuple[Optional[float], Optional[float], str]:
+    def _parse_response(self, html: str, soup: BeautifulSoup) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float], str]:
         """Parse the response HTML to extract risk values."""
-        soup = BeautifulSoup(html, 'html.parser')
 
         risk_birth = None
-        risk_posterior = None
-        recommendation = ""
+        well_appearing = None
+        equivocal = None
+        clinical_illness = None
 
-        # Try to find the risk values in the page
-        # Look for specific label IDs first
-        prior_label = soup.find(id=re.compile(r'lblPriorProbability', re.I))
-        posterior_label = soup.find(id=re.compile(r'lblPosteriorProbability', re.I))
-        rec_label = soup.find(id=re.compile(r'lblRecommendation', re.I))
-
-        if prior_label:
+        # Find the specific label elements by their IDs
+        # EOS Risk at Birth
+        lbl_eos = soup.find(id='MainContent_InfectionProbabilityCalculations_lblEOS')
+        if lbl_eos and lbl_eos.get_text(strip=True):
             try:
-                risk_birth = float(prior_label.get_text(strip=True))
+                risk_birth = float(lbl_eos.get_text(strip=True))
             except ValueError:
                 pass
 
-        if posterior_label:
+        # Well Appearing
+        lbl_well = soup.find(id='MainContent_InfectionProbabilityCalculations_lblWellAppearing')
+        if lbl_well and lbl_well.get_text(strip=True):
             try:
-                risk_posterior = float(posterior_label.get_text(strip=True))
+                well_appearing = float(lbl_well.get_text(strip=True))
             except ValueError:
                 pass
 
-        if rec_label:
-            recommendation = rec_label.get_text(strip=True)
+        # Equivocal
+        lbl_equi = soup.find(id='MainContent_InfectionProbabilityCalculations_lblEquivocal')
+        if lbl_equi and lbl_equi.get_text(strip=True):
+            try:
+                equivocal = float(lbl_equi.get_text(strip=True))
+            except ValueError:
+                pass
 
-        # Fallback: search in raw text
-        if risk_birth is None:
-            match = re.search(r'Risk at Birth[^\d]*(\d+\.?\d*)\s*per\s*1000', html, re.I)
-            if match:
-                risk_birth = float(match.group(1))
+        # Clinical Illness
+        lbl_clin = soup.find(id='MainContent_InfectionProbabilityCalculations_lblClinical')
+        if lbl_clin and lbl_clin.get_text(strip=True):
+            try:
+                clinical_illness = float(lbl_clin.get_text(strip=True))
+            except ValueError:
+                pass
 
-        if risk_posterior is None:
-            match = re.search(r'Risk after[^\d]*(\d+\.?\d*)\s*per\s*1000', html, re.I)
-            if match:
-                risk_posterior = float(match.group(1))
+        # Check for validation errors
+        errors = soup.find_all(class_='ErrorMessage')
+        error_texts = []
+        for err in errors:
+            if err.get('style') != 'display:none;' and err.get_text(strip=True):
+                error_texts.append(err.get_text(strip=True))
 
-        return risk_birth, risk_posterior, recommendation
+        debug_info = "; ".join(error_texts) if error_texts else ""
+
+        return risk_birth, well_appearing, equivocal, clinical_illness, debug_info
 
 
 def main():
     parser = argparse.ArgumentParser(description='KP EOS Calculator Scraper')
-    parser.add_argument('--test', action='store_true', help='Run only 3 test cases')
+    parser.add_argument('--test', action='store_true', help='Run only 5 test cases')
     parser.add_argument('--resume', action='store_true', help='Resume from last position')
     parser.add_argument('--delay', type=int, default=15, help='Delay between requests (seconds)')
     parser.add_argument('--output', type=str, default=OUTPUT_FILE, help='Output CSV file')
     args = parser.parse_args()
 
-    print("=" * 50)
-    print("Kaiser Permanente EOS Calculator Scraper")
+    print("=" * 60)
+    print("Kaiser Permanente EOS Calculator Scraper (FIXED)")
     print("Authorization: KP Legal Dept, Feb 5, 2026")
     print(f"Rate Limit: 1 request per {args.delay} seconds")
-    print("=" * 50)
+    print("=" * 60)
     print()
 
     # Determine cases to run
-    cases = TEST_CASES[:3] if args.test else TEST_CASES
+    cases = TEST_CASES[:5] if args.test else TEST_CASES
 
     # Check for resume
     start_index = 0
@@ -258,8 +326,9 @@ def main():
             writer = csv.writer(f)
             writer.writerow([
                 'CaseNum', 'Model', 'GA_Weeks', 'GA_Days', 'Temp_F', 'ROM_Hours',
-                'GBS_Status', 'Abx_Type', 'Abx_Duration', 'Clinical_Exam',
-                'KP_RiskAtBirth', 'KP_RiskPosterior', 'KP_Recommendation', 'Timestamp'
+                'GBS_Status', 'Antibiotics', 'Incidence',
+                'KP_RiskAtBirth', 'KP_WellAppearing', 'KP_Equivocal', 'KP_ClinicalIllness',
+                'Debug', 'Timestamp'
             ])
 
     print(f"Total cases: {len(cases)}")
@@ -278,27 +347,34 @@ def main():
     for i in range(start_index, len(cases)):
         case = cases[i]
         case_num = i + 1
-        model, ga_w, ga_d, temp_f, rom, gbs, abx_type, abx_dur, clinical = case
+        model, ga_w, ga_d, temp_f, rom, gbs, abx, incidence = case
 
-        print(f"[{case_num}/{len(cases)}] Model={model} GA={ga_w}w{ga_d}d Temp={temp_f}F ROM={rom}h GBS={gbs} Clinical={clinical}")
+        print(f"[{case_num}/{len(cases)}] Model={model} GA={ga_w}w{ga_d}d Temp={temp_f}F ROM={rom}h GBS={gbs} Abx={abx}")
 
-        risk_birth, risk_posterior, recommendation = scraper.submit_calculation(case)
+        risk_birth, well_appearing, equivocal, clinical_illness, debug = scraper.submit_calculation(case)
 
         # Log result
         with open(args.output, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
-                case_num, model, ga_w, ga_d, temp_f, rom, gbs, abx_type, abx_dur, clinical,
+                case_num, model, ga_w, ga_d, temp_f, rom, gbs, abx, incidence,
                 risk_birth if risk_birth is not None else 'ERROR',
-                risk_posterior if risk_posterior is not None else 'ERROR',
-                recommendation,
+                well_appearing if well_appearing is not None else 'ERROR',
+                equivocal if equivocal is not None else 'ERROR',
+                clinical_illness if clinical_illness is not None else 'ERROR',
+                debug,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ])
 
+        # Save debug HTML for first few cases
+        if i < 3:
+            with open(f'debug_response_{case_num}.html', 'w', encoding='utf-8') as f:
+                f.write(debug if len(debug) > 1000 else f"Risk: {risk_birth}, Well: {well_appearing}, Equi: {equivocal}, Clin: {clinical_illness}")
+
         if risk_birth is not None:
-            print(f"  -> Birth: {risk_birth} | Posterior: {risk_posterior}")
+            print(f"  -> Birth: {risk_birth} | Well: {well_appearing} | Equi: {equivocal} | Clin: {clinical_illness}")
         else:
-            print(f"  -> ERROR parsing response")
+            print(f"  -> ERROR: {debug[:100] if debug else 'No results found'}")
 
         # Rate limiting
         if i < len(cases) - 1:
@@ -306,9 +382,9 @@ def main():
             time.sleep(args.delay)
 
     print()
-    print("=" * 50)
+    print("=" * 60)
     print(f"COMPLETE! Data saved to: {args.output}")
-    print("=" * 50)
+    print("=" * 60)
 
 
 if __name__ == '__main__':
