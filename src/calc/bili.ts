@@ -209,18 +209,27 @@ export function calculateBiliSync(inputs: BiliInputs): BiliOutputs {
 }
 
 /**
+ * Format a Date as a local datetime-local input value (YYYY-MM-DDTHH:mm).
+ * toISOString returns UTC, which would mis-render in datetime-local inputs.
+ */
+export function toLocalInputValue(d: Date): string {
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 16);
+}
+
+/**
  * Get default bili inputs
  */
 export function getDefaultBiliInputs(): BiliInputs {
   const now = new Date();
-  const birth = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+  const birth = new Date(now.getTime() - 18 * 60 * 60 * 1000);
 
   return {
     gestationalAgeWeeks: 39,
     gestationalAgeDays: 0,
-    birthTime: birth.toISOString().slice(0, 16),
-    sampleTime: now.toISOString().slice(0, 16),
-    ageHours: 24,
+    birthTime: toLocalInputValue(birth),
+    sampleTime: toLocalInputValue(now),
+    ageHours: 18,
     tsbValue: 8.0,
     hasNeurotoxRiskFactors: false
   };

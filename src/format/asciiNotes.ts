@@ -125,6 +125,24 @@ export function formatBiliNote(
 }
 
 /**
+ * Combined EOS + Bili ASCII note — one paste, one chart entry.
+ */
+export function formatCombinedNote(
+  patientLabel: string,
+  eosInputs: EOSInputs,
+  eosOutputs: EOSOutputs | null,
+  biliInputs: BiliInputs,
+  biliOutputs: BiliOutputs | null,
+  timestamp?: Date
+): string {
+  const ts = timestamp || new Date();
+  const parts: string[] = [];
+  if (eosOutputs) parts.push(formatEOSNote(patientLabel, eosInputs, eosOutputs, ts));
+  if (biliOutputs) parts.push(formatBiliNote(patientLabel, biliInputs, biliOutputs, ts));
+  return parts.join('\n\n');
+}
+
+/**
  * Copy text to clipboard
  */
 export async function copyToClipboard(text: string): Promise<boolean> {

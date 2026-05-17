@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Header } from './components/Header';
+import { MobileShell } from './components/MobileShell';
+import { DesktopShell } from './components/DesktopShell';
+import { MenuDrawer } from './components/MenuDrawer';
 import { PatientSelector } from './components/PatientSelector';
-import { InputForm } from './components/InputForm';
-import { ResultPanels } from './components/ResultPanels';
 import { SnapshotsTable } from './components/SnapshotsTable';
 import { TrendChart } from './charts/TrendChart';
 import { ThresholdTables } from './pages/ThresholdTables';
 import { useTheme } from './hooks/useTheme';
 import { usePatients } from './hooks/usePatients';
 import { useKPStatus } from './hooks/useKPStatus';
+import { useBreakpoint } from './hooks/useBreakpoint';
 import { calculateEOS, getDefaultEOSInputs } from './calc/eos';
 import { calculateBili, calculateBiliSync, getDefaultBiliInputs, calculateAgeHours } from './calc/bili';
 import { formatEOSNote, formatBiliNote } from './format/asciiNotes';
@@ -17,24 +18,23 @@ import { EOSInputs, EOSOutputs, BiliInputs, BiliOutputs, AppConfig } from './typ
 
 type Page = 'calculator' | 'tables';
 
-// Default config (can be overridden by /public/config.json)
 const DEFAULT_CONFIG: AppConfig = {
   eos: {
     baseline_incidence_per_1000: 0.5,
     recommendation_thresholds: {
       routine_max: 0.50,
       enhanced_max: 1.00,
-      labs_max: 3.00
-    }
+      labs_max: 3.00,
+    },
   },
   bili: {
     api_enabled: false,
-    api_base_url: 'https://peditools.org/bili2022/api/'
+    api_base_url: 'https://peditools.org/bili2022/api/',
   },
   ui: {
     show_exchange_threshold: true,
-    theme_default: 'light'
-  }
+    theme_default: 'light',
+  },
 };
 
 export function App() {
@@ -52,9 +52,10 @@ export function App() {
     renamePatient,
     removePatient,
     addSnapshot,
-    removeSnapshot
+    removeSnapshot,
   } = usePatients();
   const { status: kpStatus, loading: kpLoading } = useKPStatus();
+  const { isMobile } = useBreakpoint();
 
   const [currentPage, setCurrentPage] = useState<Page>('calculator');
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -64,30 +65,24 @@ export function App() {
   const [biliInputs, setBiliInputs] = useState<BiliInputs>(getDefaultBiliInputs);
   const [eosOutputs, setEOSOutputs] = useState<EOSOutputs | null>(null);
   const [biliOutputs, setBiliOutputs] = useState<BiliOutputs | null>(null);
-  const [biliLoading, setBiliLoading] = useState(false);
   const [apiAvailable, setApiAvailable] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // Load config on mount
   useEffect(() => {
     fetch('/config.json')
-      .then(res => res.ok ? res.json() : DEFAULT_CONFIG)
-      .then(cfg => setConfig({ ...DEFAULT_CONFIG, ...cfg }))
+      .then((res) => (res.ok ? res.json() : DEFAULT_CONFIG))
+      .then((cfg) => setConfig({ ...DEFAULT_CONFIG, ...cfg }))
       .catch(() => setConfig(DEFAULT_CONFIG));
   }, []);
 
-  // Calculate EOS whenever inputs change
   useEffect(() => {
     const outputs = calculateEOS(eosInputs, config.eos.recommendation_thresholds);
     setEOSOutputs(outputs);
   }, [eosInputs, config.eos.recommendation_thresholds]);
 
-  // Calculate Bili whenever inputs change
   useEffect(() => {
     let cancelled = false;
-
-    const calculate = async () => {
-      setBiliLoading(true);
-
+    const run = async () => {
       if (config.bili.api_enabled) {
         const outputs = await calculateBili(biliInputs, true);
         if (!cancelled) {
@@ -96,69 +91,56 @@ export function App() {
         }
       } else {
         const outputs = calculateBiliSync(biliInputs);
-        if (!cancelled) {
-          setBiliOutputs(outputs);
-        }
-      }
-
-      if (!cancelled) {
-        setBiliLoading(false);
+        if (!cancelled) setBiliOutputs(outputs);
       }
     };
-
-    calculate();
-
+    run();
     return () => {
       cancelled = true;
     };
   }, [biliInputs, config.bili.api_enabled]);
 
-  // Update age hours when times change
   useEffect(() => {
     if (biliInputs.birthTime && biliInputs.sampleTime) {
       const ageHours = calculateAgeHours(biliInputs.birthTime, biliInputs.sampleTime);
       if (ageHours !== biliInputs.ageHours && ageHours >= 0) {
-        setBiliInputs(prev => ({ ...prev, ageHours }));
+        setBiliInputs((prev) => ({ ...prev, ageHours }));
       }
     }
   }, [biliInputs.birthTime, biliInputs.sampleTime]);
 
-  // Sync GA between EOS and Bili inputs
-  const handleEOSInputChange = useCallback((updates: Partial<EOSInputs>) => {
-    setEOSInputs(prev => ({ ...prev, ...updates }));
-
-    // Sync GA to bili
+  const handleEOSChange = useCallback((updates: Partial<EOSInputs>) => {
+    setEOSInputs((prev) => ({ ...prev, ...updates }));
     if ('gestationalAgeWeeks' in updates || 'gestationalAgeDays' in updates) {
-      setBiliInputs(prev => ({
+      setBiliInputs((prev) => ({
         ...prev,
         gestationalAgeWeeks: updates.gestationalAgeWeeks ?? prev.gestationalAgeWeeks,
-        gestationalAgeDays: updates.gestationalAgeDays ?? prev.gestationalAgeDays
+        gestationalAgeDays: updates.gestationalAgeDays ?? prev.gestationalAgeDays,
       }));
     }
   }, []);
 
-  const handleBiliInputChange = useCallback((updates: Partial<BiliInputs>) => {
-    setBiliInputs(prev => ({ ...prev, ...updates }));
-
-    // Sync GA to EOS
+  const handleBiliChange = useCallback((updates: Partial<BiliInputs>) => {
+    setBiliInputs((prev) => ({ ...prev, ...updates }));
     if ('gestationalAgeWeeks' in updates || 'gestationalAgeDays' in updates) {
-      setEOSInputs(prev => ({
+      setEOSInputs((prev) => ({
         ...prev,
         gestationalAgeWeeks: updates.gestationalAgeWeeks ?? prev.gestationalAgeWeeks,
-        gestationalAgeDays: updates.gestationalAgeDays ?? prev.gestationalAgeDays
+        gestationalAgeDays: updates.gestationalAgeDays ?? prev.gestationalAgeDays,
       }));
     }
   }, []);
 
-  // Save snapshot
+  const handleResetAll = useCallback(() => {
+    setEOSInputs(getDefaultEOSInputs(config.eos.baseline_incidence_per_1000));
+    setBiliInputs(getDefaultBiliInputs());
+    setSelectedPatientId(null);
+  }, [config.eos.baseline_incidence_per_1000, setSelectedPatientId]);
+
   const handleSaveSnapshot = useCallback(async () => {
     if (!selectedPatient || !eosOutputs) return;
-
     const eosNote = formatEOSNote(selectedPatient.label, eosInputs, eosOutputs);
-    const biliNote = biliOutputs
-      ? formatBiliNote(selectedPatient.label, biliInputs, biliOutputs)
-      : '';
-
+    const biliNote = biliOutputs ? formatBiliNote(selectedPatient.label, biliInputs, biliOutputs) : '';
     await addSnapshot(
       { eos: eosInputs, bili: biliInputs },
       { eos: eosOutputs, bili: biliOutputs },
@@ -166,7 +148,6 @@ export function App() {
     );
   }, [selectedPatient, eosInputs, biliInputs, eosOutputs, biliOutputs, addSnapshot]);
 
-  // Export data
   const handleExport = useCallback(async () => {
     try {
       const data = await exportAllData();
@@ -183,7 +164,6 @@ export function App() {
     }
   }, []);
 
-  // Import data
   const handleImport = useCallback(async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -191,7 +171,6 @@ export function App() {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-
       try {
         const text = await file.text();
         const result = await importData(text);
@@ -205,86 +184,91 @@ export function App() {
     input.click();
   }, []);
 
-  // Show tables page
   if (currentPage === 'tables') {
     return <ThresholdTables onBack={() => setCurrentPage('calculator')} />;
   }
 
-  // Show calculator page
+  const patientLabel = selectedPatient?.label ?? '';
+  const shellProps = {
+    eosInputs,
+    biliInputs,
+    eosOutputs,
+    biliOutputs,
+    onEOSChange: handleEOSChange,
+    onBiliChange: handleBiliChange,
+    onOpenMenu: () => setMenuOpen(true),
+    onResetAll: handleResetAll,
+    patientLabel,
+  };
+
   return (
-    <div className="app">
-      <Header
-        theme={theme}
-        effectiveTheme={effectiveTheme}
-        onToggleTheme={toggleTheme}
-        kpStatus={kpStatus}
-        kpLoading={kpLoading}
-        onExport={handleExport}
-        onImport={handleImport}
-        onShowTables={() => setCurrentPage('tables')}
-      />
+    <div className="app" data-mode={isMobile ? 'mobile' : 'desktop'}>
+      {isMobile ? <MobileShell {...shellProps} /> : <DesktopShell {...shellProps} />}
 
-      <main className="main-content">
-        {patientsError && (
-          <div className="error-banner" onClick={clearError}>
-            {patientsError} (click to dismiss)
+      <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <div className="drawer-content">
+          <h3>Settings</h3>
+
+          <div className="drawer-section">
+            <div className="drawer-row">
+              <span>Theme</span>
+              <button className="d-btn d-btn-ghost" onClick={toggleTheme}>
+                {effectiveTheme === 'dark' ? '☀ Light' : '☾ Dark'} ({theme})
+              </button>
+            </div>
+            <div className="drawer-row">
+              <span>KP calculator status</span>
+              <span className="drawer-status">
+                {kpLoading ? 'checking…' : kpStatus?.status ?? 'unknown'}
+              </span>
+            </div>
           </div>
-        )}
 
-        {config.bili.api_enabled && !apiAvailable && (
-          <div className="warning-banner">
-            PediTools API unavailable. Using local AAP 2022 threshold calculations.
+          <div className="drawer-section">
+            <h4>Patient (optional)</h4>
+            <PatientSelector
+              patients={patients}
+              selectedPatientId={selectedPatientId}
+              onSelectPatient={setSelectedPatientId}
+              onAddPatient={addPatient}
+              onRenamePatient={renamePatient}
+              onDeletePatient={removePatient}
+              onSaveSnapshot={handleSaveSnapshot}
+              canSave={!!selectedPatient && !!eosOutputs}
+              loading={patientsLoading}
+            />
+            {patientsError && (
+              <div className="error-banner" onClick={clearError}>
+                {patientsError} (tap to dismiss)
+              </div>
+            )}
           </div>
-        )}
 
-        <PatientSelector
-          patients={patients}
-          selectedPatientId={selectedPatientId}
-          onSelectPatient={setSelectedPatientId}
-          onAddPatient={addPatient}
-          onRenamePatient={renamePatient}
-          onDeletePatient={removePatient}
-          onSaveSnapshot={handleSaveSnapshot}
-          canSave={!!selectedPatient && !!eosOutputs}
-          loading={patientsLoading}
-        />
+          {snapshots.length > 0 && (
+            <div className="drawer-section">
+              <h4>Trend</h4>
+              <TrendChart snapshots={snapshots} />
+              <SnapshotsTable snapshots={snapshots} onDeleteSnapshot={removeSnapshot} />
+            </div>
+          )}
 
-        <InputForm
-          eosInputs={eosInputs}
-          biliInputs={biliInputs}
-          onEOSChange={handleEOSInputChange}
-          onBiliChange={handleBiliInputChange}
-        />
-
-        <ResultPanels
-          patientLabel={selectedPatient?.label || 'No patient selected'}
-          eosInputs={eosInputs}
-          biliInputs={biliInputs}
-          eosOutputs={eosOutputs}
-          biliOutputs={biliOutputs}
-          biliLoading={biliLoading}
-          showExchangeThreshold={config.ui.show_exchange_threshold}
-        />
-
-        {snapshots.length > 0 && (
-          <section className="section">
-            <h2>Trend Chart</h2>
-            <TrendChart snapshots={snapshots} />
-          </section>
-        )}
-
-        <SnapshotsTable
-          snapshots={snapshots}
-          onDeleteSnapshot={removeSnapshot}
-        />
-      </main>
-
-      <footer className="footer">
-        <p>
-          Decision support only. Verify with institutional protocol and clinical judgment.
-          No PHI stored. Data remains on this device only.
-        </p>
-      </footer>
+          <div className="drawer-section">
+            <h4>Data</h4>
+            <div className="drawer-row drawer-row-buttons">
+              <button className="d-btn d-btn-ghost" onClick={handleExport}>Export</button>
+              <button className="d-btn d-btn-ghost" onClick={handleImport}>Import</button>
+              <button className="d-btn d-btn-ghost" onClick={() => setCurrentPage('tables')}>
+                Threshold tables
+              </button>
+            </div>
+            {config.bili.api_enabled && !apiAvailable && (
+              <div className="warning-banner">
+                PediTools API unavailable. Using local AAP 2022 tables.
+              </div>
+            )}
+          </div>
+        </div>
+      </MenuDrawer>
     </div>
   );
 }
