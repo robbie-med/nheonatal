@@ -6,12 +6,15 @@ A single-page, static webapp for clinicians to calculate:
 
 ## Features
 
-- Single patient form feeds both calculators instantly
-- **Dual EOS model support**: 2017 and 2024 versions with different GBS Unknown handling
-- Side-by-side result panels for EOS and Bilirubin
-- Copy-ready ASCII notes for clinical documentation
-- Local patient storage (IndexedDB) - unlimited records
-- Trend charts for tracking values over time
+- Speed-optimized UI: chip-based segmented controls and +/- steppers for fast entry on touch or desktop
+- Two custom layouts selected by viewport:
+  - **Mobile** — single scroll, sticky bottom dock with combined EOS + bili result and one-tap Copy
+  - **Desktop** — inputs on the left, sticky results card and copyable note on the right
+- **Dual EOS model support**: 2017 and 2024 versions, ported from the published KP logistic regression
+- Combined EOS + bilirubin ASCII note with a single Copy button
+- Optional clock-based age entry (birth time + sample time auto-derive age in hours)
+- "Next baby" reset clears all inputs and defaults age to 18h
+- Local patient storage (IndexedDB) and trend charts behind a slide-out drawer
 - Light/Dark mode with persistent preference
 - KP model change monitoring via GitHub Actions
 - Fully static - runs on GitHub Pages with no backend
@@ -36,22 +39,27 @@ npm test
 
 ```
 src/
-  components/     # React UI components
-  calc/          # EOS and Bili calculation modules
-  storage/       # IndexedDB wrapper (Dexie)
-  monitor/       # KP fingerprint checker
-  format/        # ASCII note formatters
-  charts/        # Trend chart component
-  hooks/         # React hooks
-  types/         # TypeScript interfaces
-  styles/        # CSS with theme variables
+  components/      # React UI components (MobileShell, DesktopShell, ChipGroup, Stepper, ...)
+  calc/            # EOS regression port + Bili threshold calc
+  storage/         # IndexedDB wrapper (Dexie)
+  monitor/         # KP fingerprint checker
+  format/          # ASCII note formatters (incl. combined note)
+  charts/          # Trend chart component
+  hooks/           # React hooks (useBreakpoint, useTheme, usePatients, ...)
+  types/           # TypeScript interfaces
+  styles/          # CSS with theme variables + shells.css for layout
 public/
-  config.json    # Runtime configuration
-  kp_status.json # KP model status (auto-updated)
+  config.json      # Runtime configuration
+  kp_status.json   # KP model status (auto-updated)
 scripts/
-  kp-scraper.py      # Python scraper for KP calculator calibration
-  kp-scraper.ps1     # PowerShell scraper alternative
-  kp_fingerprint.js  # CI script for KP monitoring
+  kp-scraper.py        # Python scraper for KP calculator
+  kp-scraper.ps1       # PowerShell scraper alternative
+  scrape_2017.py       # 2017-model scrape helper
+  scrape_2017_abx.py   # 2017 IAP-coefficient scrape helper
+  fit_eos_regression.py# Fits logistic-regression coefficients from scraped data
+  eos_coefficients.json# Fitted 2017 + 2024 coefficients consumed by src/calc/eos.ts
+  kp_fingerprint.js    # CI script for KP monitoring
+kp-eos-data.csv        # Scraped KP verification vectors used by tests
 ```
 
 ## Configuration
@@ -78,9 +86,11 @@ Implements the Kaiser Permanente Early-Onset Sepsis model with support for both 
 
 **Key Difference**: The 2024 model assigns significantly higher risk to GBS Unknown status, treating it closer to GBS Positive rather than GBS Negative.
 
-### Calibration
+### Implementation
 
-The calculator is calibrated from actual KP calculator outputs to achieve 1:1 parity. Scraper scripts in `/scripts` were used to collect test vectors from the KP site (with authorization).
+`src/calc/eos.ts` is a direct port of the Kuzniewicz/Puopolo logistic regression: prior log-odds are computed from gestational age (cubic basis centered at 39.5w), highest maternal temperature, ROM (transformed as `(h+0.05)^0.2`), GBS status, and intrapartum antibiotics; the baseline-incidence offset rescales the prior odds; then the published clinical-exam likelihood ratios produce the posterior risk.
+
+Coefficients live in [scripts/eos_coefficients.json](scripts/eos_coefficients.json) and are fitted from KP web outputs scraped into [kp-eos-data.csv](kp-eos-data.csv) via [scripts/fit_eos_regression.py](scripts/fit_eos_regression.py). The test suite (`src/calc/eos.test.ts`) pins the implementation against those vectors — including the reference case 39w0d / 37.0°C / ROM 12h / GBS− / no abx / baseline 0.5 → **0.29/1000 at birth**, **0.10 / 1.06 / 4.19 post-exam**.
 
 ### References
 
@@ -130,9 +140,13 @@ If changes are detected:
 1. Updates `public/kp_status.json`
 2. Creates a GitHub Issue for review
 
-## Scraper Scripts
+## Scraper & Fitting Scripts
 
-The `/scripts` directory contains tools for calibrating the EOS calculator against the KP site:
+The `/scripts` directory contains the pipeline used to fit the EOS regression against the KP site:
+
+1. **Scrape** verification vectors with `kp-scraper.py`, `scrape_2017.py`, or `scrape_2017_abx.py` (rate-limited; honors KP terms of use). Output → `kp-eos-data.csv`.
+2. **Fit** the logistic-regression coefficients with `fit_eos_regression.py`. Output → `scripts/eos_coefficients.json`, which is imported by `src/calc/eos.ts`.
+3. **Validate** with `npm test` — the test suite asserts the implementation matches the scraped table.
 
 ### kp-scraper.py (Python)
 
@@ -150,15 +164,7 @@ python scripts/kp-scraper.py --no-verify-ssl
 python scripts/kp-scraper.py --output results.csv
 ```
 
-Features:
-- Handles ASP.NET AJAX UpdatePanel format
-- Two-step form submission for 2024 model
-- Rate-limited to 4 requests/minute
-- CSV output with all input parameters and results
-
-### kp-scraper.ps1 (PowerShell)
-
-Windows-native alternative with similar functionality.
+Handles ASP.NET AJAX UpdatePanel format and the 2024-model two-step submission. `kp-scraper.ps1` is a Windows-native PowerShell equivalent.
 
 ## Deployment
 
