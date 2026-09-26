@@ -94,6 +94,8 @@ The intercept for each baseline incidence is the exact value KP's calculator sub
 
 `src/calc/eos.test.ts` checks every row of [kp-eos-data.csv](kp-eos-data.csv) (outputs scraped from the KP calculator) at KP's displayed precision, 0.01/1000. Because the coefficients come from KP's published pages, not from this data, the CSV is an independent check. It also includes the reference case 39w0d / 37.0°C / ROM 12h / GBS− / no abx / baseline 0.5 → **0.29/1000 at birth**, **0.10 / 1.06 / 4.19 post-exam**.
 
+For where every EOS and bilirubin number comes from, how it was verified, and how to re-check it, see [docs/AUDIT-2026-09.md](docs/AUDIT-2026-09.md).
+
 ### References
 
 - Escobar GJ, et al. JAMA Pediatr. 2014
