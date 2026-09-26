@@ -7,7 +7,9 @@
  * Tables organized by:
  * - Gestational age (35-40 weeks)
  * - Risk factor status (none vs with neurotoxicity risk factors)
- * - Age in hours (0-336 hours / 14 days)
+ * - Age in hours: array index i holds the threshold for hour i + 1
+ *   (hours 1-336). Verified value-for-value against the PediTools bili2022
+ *   calculator, which also takes integer hours 1-336.
  */
 
 // Phototherapy thresholds - NO risk factors (Supplemental Table 1)
@@ -522,8 +524,10 @@ export function getThreshold(
     return 0;
   }
 
-  // Clamp age to available range
-  const hourIndex = Math.max(0, Math.min(thresholds.length - 1, Math.floor(ageHours)));
+  // Tables start at hour 1 (index 0) and run to hour 336. Age is rounded to
+  // the nearest whole hour, as PediTools does.
+  const hour = Math.max(1, Math.min(336, Math.round(ageHours)));
+  const hourIndex = Math.min(thresholds.length, hour) - 1;
 
   return thresholds[hourIndex];
 }

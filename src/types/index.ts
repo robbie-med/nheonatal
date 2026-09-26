@@ -90,11 +90,6 @@ export interface KPStatus {
 export interface AppConfig {
   eos: {
     baseline_incidence_per_1000: number;
-    recommendation_thresholds: {
-      routine_max: number;
-      enhanced_max: number;
-      labs_max: number;
-    };
   };
   bili: {
     api_enabled: boolean;

@@ -1,13 +1,15 @@
 /**
- * EOS Calculator — table-driven KP parity tests.
+ * EOS Calculator — KP parity tests.
  *
- * Test vectors are the KP web-calculator outputs scraped into
- * kp-eos-data.csv. The regression in eos.ts is fit against the same data,
- * so these tests confirm the fit reproduces KP across the input space.
+ * Every row of kp-eos-data.csv (outputs scraped from the KP web calculator)
+ * must be reproduced exactly at KP's displayed precision (0.01/1000). The
+ * coefficients in eos.ts come from KP's published FAQ pages, not from a fit
+ * to this data, so the CSV is an independent check.
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculateEOS, getDefaultEOSInputs } from './eos';
+import kpCsv from '../../kp-eos-data.csv?raw';
+import { calculateEOS, getDefaultEOSInputs, getIncidenceOptions } from './eos';
 import { EOSInputs, EOSModelVersion } from '../types';
 
 function fToC(f: number): number {
@@ -33,7 +35,7 @@ function mapAbx(a: string): { type: EOSInputs['antibioticType']; duration: EOSIn
   }
 }
 
-interface KPCase {
+interface KPRow {
   model: EOSModelVersion;
   gaW: number;
   gaD: number;
@@ -42,13 +44,36 @@ interface KPCase {
   gbs: string;
   abx: string;
   inc: number;
-  kpBirth: number;
-  kpWell: number;
-  kpEqui: number;
-  kpIll: number;
+  birth: number;
+  well: number;
+  equi: number;
+  ill: number;
 }
 
-function inputs(c: KPCase, exam: EOSInputs['clinicalExam']): EOSInputs {
+function parseCsv(text: string): KPRow[] {
+  const [header, ...lines] = text.trim().split(/\r?\n/);
+  const cols = header.split(',');
+  const idx = (name: string) => cols.indexOf(name);
+  return lines.map((line) => {
+    const f = line.split(',');
+    return {
+      model: f[idx('Model')] as EOSModelVersion,
+      gaW: Number(f[idx('GA_Weeks')]),
+      gaD: Number(f[idx('GA_Days')]),
+      tempF: Number(f[idx('Temp_F')]),
+      rom: Number(f[idx('ROM_Hours')]),
+      gbs: f[idx('GBS_Status')],
+      abx: f[idx('Antibiotics')],
+      inc: Number(f[idx('Incidence')]),
+      birth: Number(f[idx('KP_RiskAtBirth')]),
+      well: Number(f[idx('KP_WellAppearing')]),
+      equi: Number(f[idx('KP_Equivocal')]),
+      ill: Number(f[idx('KP_ClinicalIllness')]),
+    };
+  });
+}
+
+function inputs(c: KPRow, exam: EOSInputs['clinicalExam']): EOSInputs {
   const abx = mapAbx(c.abx);
   return {
     modelVersion: c.model,
@@ -64,76 +89,27 @@ function inputs(c: KPCase, exam: EOSInputs['clinicalExam']): EOSInputs {
   };
 }
 
-// Subset of KP table — chosen to cover every predictor axis plus combined
-// risk factors. (Full table in kp-eos-data.csv; these are the rows where
-// the old single-axis implementation diverged from KP.)
-const KP_CASES: KPCase[] = [
-  // 2024 — temperature sweep at 40w, no other RFs
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.07,  kpWell: 0.03,  kpEqui: 0.26,  kpIll: 1.03 },
-  { model: '2024', gaW: 40, gaD: 0, tempF: 100.0, rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.39,  kpWell: 0.14,  kpEqui: 1.42,  kpIll: 5.62 },
-  { model: '2024', gaW: 40, gaD: 0, tempF: 102.0, rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 2.14,  kpWell: 0.77,  kpEqui: 7.76,  kpIll: 30.14 },
-  // 2024 — ROM sweep
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 12, gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.18,  kpWell: 0.07,  kpEqui: 0.67,  kpIll: 2.66 },
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 48, gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.29,  kpWell: 0.10,  kpEqui: 1.06,  kpIll: 4.18 },
-  // 2024 — GA sweep
-  { model: '2024', gaW: 35, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.39,  kpWell: 0.14,  kpEqui: 1.42,  kpIll: 5.62 },
-  { model: '2024', gaW: 39, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.07,  kpWell: 0.02,  kpEqui: 0.25,  kpIll: 0.97 },
-  // 2024 — GBS
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'none', inc: 0.5, kpBirth: 0.20,  kpWell: 0.07,  kpEqui: 0.72,  kpIll: 2.85 },
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Unknown',  abx: 'none', inc: 0.5, kpBirth: 0.22,  kpWell: 0.08,  kpEqui: 0.81,  kpIll: 3.20 },
-  // 2024 — antibiotics
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'broad4', inc: 0.5, kpBirth: 0.02, kpWell: 0.01, kpEqui: 0.07, kpIll: 0.28 },
-  { model: '2024', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'gbs2',   inc: 0.5, kpBirth: 0.02, kpWell: 0.01, kpEqui: 0.09, kpIll: 0.34 },
-  // 2024 — combined risk factors (these are where the old implementation failed)
-  { model: '2024', gaW: 38, gaD: 0, tempF: 100.0, rom: 18, gbs: 'Unknown',  abx: 'none', inc: 0.5, kpBirth: 3.87,  kpWell: 1.40,  kpEqui: 13.98, kpIll: 53.33 },
-  { model: '2024', gaW: 37, gaD: 0, tempF: 100.5, rom: 12, gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 2.37,  kpWell: 0.86,  kpEqui: 8.61,  kpIll: 33.34 },
-  { model: '2024', gaW: 39, gaD: 0, tempF: 99.5,  rom: 6,  gbs: 'Positive', abx: 'none', inc: 0.5, kpBirth: 1.44,  kpWell: 0.52,  kpEqui: 5.25,  kpIll: 20.54 },
-  // 2017 — baselines and combined
-  { model: '2017', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.02,  kpWell: 0.01,  kpEqui: 0.12,  kpIll: 0.49 },
-  { model: '2017', gaW: 40, gaD: 0, tempF: 100.0, rom: 0,  gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.13,  kpWell: 0.05,  kpEqui: 0.65,  kpIll: 2.77 },
-  { model: '2017', gaW: 40, gaD: 0, tempF: 98.0,  rom: 24, gbs: 'Negative', abx: 'none', inc: 0.5, kpBirth: 0.12,  kpWell: 0.05,  kpEqui: 0.60,  kpIll: 2.52 },
-  { model: '2017', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'none', inc: 0.5, kpBirth: 0.04,  kpWell: 0.02,  kpEqui: 0.21,  kpIll: 0.87 },
-  { model: '2017', gaW: 38, gaD: 0, tempF: 100.0, rom: 18, gbs: 'Unknown',  abx: 'none', inc: 0.5, kpBirth: 0.74,  kpWell: 0.31,  kpEqui: 3.71,  kpIll: 15.55 },
-  // 2017 — antibiotics (newly scraped)
-  { model: '2017', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'broad4', inc: 0.5, kpBirth: 0.01, kpWell: 0.01, kpEqui: 0.06, kpIll: 0.27 },
-  { model: '2017', gaW: 40, gaD: 0, tempF: 98.0,  rom: 0,  gbs: 'Positive', abx: 'gbs2',   inc: 0.5, kpBirth: 0.01, kpWell: 0.01, kpEqui: 0.07, kpIll: 0.30 },
-  { model: '2017', gaW: 38, gaD: 0, tempF: 100.0, rom: 12, gbs: 'Positive', abx: 'broad4', inc: 0.5, kpBirth: 0.33, kpWell: 0.13, kpEqui: 1.64, kpIll: 6.90 },
-];
+const KP_ROWS = parseCsv(kpCsv);
 
-// Tolerance: KP rounds to 2dp, fit residuals add up to ~0.5/1000 worst-case
-// for 2024 and ~1.05/1000 worst-case for 2017 (no abx data for fit).
-// We use absolute tolerance scaled by magnitude.
-function tolerance(kp: number): number {
-  if (kp < 1) return 0.1;
-  if (kp < 10) return 0.7;
-  if (kp < 100) return 3.0;
-  return kp * 0.1;
-}
+describe('EOS calculator — exact KP parity (every scraped row)', () => {
+  it('loads the scraped table', () => {
+    expect(KP_ROWS.length).toBeGreaterThanOrEqual(59);
+  });
 
-describe('EOS calculator — KP parity (table-driven)', () => {
-  for (const c of KP_CASES) {
-    const label = `${c.model} GA=${c.gaW}w${c.gaD}d T=${c.tempF}F ROM=${c.rom}h GBS=${c.gbs} abx=${c.abx}`;
-
-    it(`${label}: risk at birth ≈ ${c.kpBirth}`, () => {
-      const r = calculateEOS(inputs(c, 'well'));
-      expect(r.riskAtBirth).toBeCloseTo(c.kpBirth, 0);
-      expect(Math.abs(r.riskAtBirth - c.kpBirth)).toBeLessThanOrEqual(tolerance(c.kpBirth));
-    });
-
-    it(`${label}: posterior matches well/equi/ill`, () => {
-      const well = calculateEOS(inputs(c, 'well')).riskPosterior;
-      const equi = calculateEOS(inputs(c, 'equivocal')).riskPosterior;
-      const ill  = calculateEOS(inputs(c, 'ill')).riskPosterior;
-      expect(Math.abs(well - c.kpWell)).toBeLessThanOrEqual(tolerance(c.kpWell));
-      expect(Math.abs(equi - c.kpEqui)).toBeLessThanOrEqual(tolerance(c.kpEqui));
-      expect(Math.abs(ill  - c.kpIll )).toBeLessThanOrEqual(tolerance(c.kpIll));
+  for (const c of KP_ROWS) {
+    const label = `${c.model} GA=${c.gaW}w${c.gaD}d T=${c.tempF}F ROM=${c.rom}h GBS=${c.gbs} abx=${c.abx} inc=${c.inc}`;
+    it(label, () => {
+      expect(calculateEOS(inputs(c, 'well')).riskAtBirth).toBeCloseTo(c.birth, 5);
+      expect(calculateEOS(inputs(c, 'well')).riskPosterior).toBeCloseTo(c.well, 5);
+      expect(calculateEOS(inputs(c, 'equivocal')).riskPosterior).toBeCloseTo(c.equi, 5);
+      expect(calculateEOS(inputs(c, 'ill')).riskPosterior).toBeCloseTo(c.ill, 5);
     });
   }
 });
 
-describe('EOS reference case (user-reported)', () => {
-  it('39w0d, 37.0°C, ROM 12h, GBS−, no abx, well, 2024 → 0.29/1000 at birth', () => {
-    const result = calculateEOS({
+describe('EOS reference case (user-reported KP output)', () => {
+  it('39w0d, 37.0°C, ROM 12h, GBS−, no abx, 2024, 0.5/1000 → 0.29 birth; 0.10 / 1.06 / 4.19', () => {
+    const base: EOSInputs = {
       modelVersion: '2024',
       gestationalAgeWeeks: 39,
       gestationalAgeDays: 0,
@@ -144,11 +120,46 @@ describe('EOS reference case (user-reported)', () => {
       antibioticDuration: 'none',
       clinicalExam: 'well',
       baselineIncidence: 0.5,
-    });
-    // KP web calc returns 0.29 at birth, 0.10 well, 1.06 equi, 4.19 ill.
-    expect(result.riskAtBirth).toBeCloseTo(0.29, 1);
-    expect(result.riskPosterior).toBeCloseTo(0.10, 1);
+    };
+    expect(calculateEOS(base).riskAtBirth).toBe(0.29);
+    expect(calculateEOS(base).riskPosterior).toBe(0.1);
+    expect(calculateEOS({ ...base, clinicalExam: 'equivocal' }).riskPosterior).toBe(1.06);
+    expect(calculateEOS({ ...base, clinicalExam: 'ill' }).riskPosterior).toBe(4.19);
   });
+});
+
+describe('EOS recommendations — match KP web calculator output', () => {
+  // Recommendation text observed on the live KP calculator (2026-09-26) for these rows.
+  const cases: { row: Partial<KPRow>; exam: EOSInputs['clinicalExam']; code: string; text: string }[] = [
+    // 2024 40w 98F ROM0 GBS- : birth 0.07, well 0.03, equi 0.26, ill 1.03
+    { row: { model: '2024', gaW: 40, tempF: 98, rom: 0, gbs: 'Negative' }, exam: 'well', code: 'routine', text: 'No culture, no antibiotics. Routine vitals.' },
+    { row: { model: '2024', gaW: 40, tempF: 98, rom: 0, gbs: 'Negative' }, exam: 'equivocal', code: 'routine', text: 'No culture, no antibiotics. Routine vitals.' },
+    { row: { model: '2024', gaW: 40, tempF: 98, rom: 0, gbs: 'Negative' }, exam: 'ill', code: 'empiric', text: 'Consider starting empiric antibiotics. Vitals per NICU.' },
+    // 2017 40w 98F ROM0 GBS- : ill 0.49 -> still "consider starting empiric antibiotics"
+    { row: { model: '2017', gaW: 40, tempF: 98, rom: 0, gbs: 'Negative' }, exam: 'ill', code: 'empiric', text: 'Consider starting empiric antibiotics. Vitals per NICU.' },
+    // 2024 37w 100.5F ROM12 GBS- : birth 2.37, well 0.86 -> vitals q4h because birth risk >= 1
+    { row: { model: '2024', gaW: 37, tempF: 100.5, rom: 12, gbs: 'Negative' }, exam: 'well', code: 'enhanced', text: 'No culture, no antibiotics. Vitals every 4 hours for 24 hours.' },
+    { row: { model: '2024', gaW: 37, tempF: 100.5, rom: 12, gbs: 'Negative' }, exam: 'equivocal', code: 'empiric', text: 'Empiric antibiotics. Vitals per NICU.' },
+    // 2024 38w 100F ROM18 GBS unk : well 1.40 -> blood culture
+    { row: { model: '2024', gaW: 38, tempF: 100, rom: 18, gbs: 'Unknown' }, exam: 'well', code: 'labs', text: 'Blood culture. Vitals every 4 hours for 24 hours.' },
+    // 2024 40w 98F ROM48 GBS- : equi 1.06 -> blood culture; ill 4.18 -> empiric
+    { row: { model: '2024', gaW: 40, tempF: 98, rom: 48, gbs: 'Negative' }, exam: 'equivocal', code: 'labs', text: 'Blood culture. Vitals every 4 hours for 24 hours.' },
+    { row: { model: '2024', gaW: 40, tempF: 98, rom: 48, gbs: 'Negative' }, exam: 'ill', code: 'empiric', text: 'Empiric antibiotics. Vitals per NICU.' },
+    // 2024 35w 101F ROM24 GBS+ : well 15.82 -> empiric
+    { row: { model: '2024', gaW: 35, tempF: 101, rom: 24, gbs: 'Positive' }, exam: 'well', code: 'empiric', text: 'Empiric antibiotics. Vitals per NICU.' },
+  ];
+
+  for (const c of cases) {
+    const row: KPRow = {
+      model: '2024', gaW: 40, gaD: 0, tempF: 98, rom: 0, gbs: 'Negative', abx: 'none', inc: 0.5,
+      birth: 0, well: 0, equi: 0, ill: 0, ...c.row,
+    };
+    it(`${row.model} GA=${row.gaW} T=${row.tempF} ROM=${row.rom} GBS=${row.gbs} ${c.exam} → ${c.code}`, () => {
+      const r = calculateEOS(inputs(row, c.exam));
+      expect(r.recommendationCode).toBe(c.code);
+      expect(r.recommendationText).toBe(c.text);
+    });
+  }
 });
 
 describe('Antibiotic mapping', () => {
@@ -161,43 +172,37 @@ describe('Antibiotic mapping', () => {
       antibioticType: 'gbsSpecific',
       antibioticDuration: 'lessThan2h',
     });
-    expect(shortAbx.riskAtBirth).toBeCloseTo(noAbx.riskAtBirth, 2);
+    expect(shortAbx.riskAtBirth).toBe(noAbx.riskAtBirth);
   });
 
-  it('adequate abx reduces risk', () => {
-    const base = getDefaultEOSInputs();
-    const noAbx = calculateEOS({ ...base, gbsStatus: 'positive' });
-    const withAbx = calculateEOS({
-      ...base,
-      gbsStatus: 'positive',
-      antibioticType: 'broadSpectrum',
-      antibioticDuration: 'greaterThan4h',
-    });
-    expect(withAbx.riskAtBirth).toBeLessThan(noAbx.riskAtBirth);
+  it('GBS-specific 2-4h and >=4h are the same KP category', () => {
+    const base = { ...getDefaultEOSInputs(), gbsStatus: 'positive' as const, antibioticType: 'gbsSpecific' as const, romHours: 18, maternalTempC: 38.5 };
+    expect(calculateEOS({ ...base, antibioticDuration: '2to4h' }).riskAtBirth)
+      .toBe(calculateEOS({ ...base, antibioticDuration: 'greaterThan4h' }).riskAtBirth);
   });
 });
 
-describe('Baseline incidence scaling', () => {
-  it('doubles risk when baseline doubles (logit offset)', () => {
-    const base = getDefaultEOSInputs();
-    const low = calculateEOS({ ...base, baselineIncidence: 0.5 }).riskAtBirth;
-    const high = calculateEOS({ ...base, baselineIncidence: 1.0 }).riskAtBirth;
-    // For small risks, doubling baseline ≈ doubles risk.
-    expect(high / low).toBeGreaterThan(1.8);
-    expect(high / low).toBeLessThan(2.2);
+describe('Baseline incidence', () => {
+  it('offers exactly the incidences in KP\'s dropdowns', () => {
+    expect(getIncidenceOptions('2017')).toEqual([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 4]);
+    expect(getIncidenceOptions('2024')).toEqual([0.05, 0.1, 0.2, 0.27, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 4, 5]);
+  });
+
+  it('off-list incidence falls between its neighbours', () => {
+    const base = { ...getDefaultEOSInputs(), maternalTempC: 38.5, romHours: 18 };
+    const lo = calculateEOS({ ...base, baselineIncidence: 1 }).riskAtBirth;
+    const mid = calculateEOS({ ...base, baselineIncidence: 1.5 }).riskAtBirth;
+    const hi = calculateEOS({ ...base, baselineIncidence: 2 }).riskAtBirth;
+    expect(mid).toBeGreaterThan(lo);
+    expect(mid).toBeLessThan(hi);
   });
 });
 
-describe('Clinical exam likelihood ratios', () => {
-  it('well-appearing reduces posterior below prior', () => {
-    const inp = getDefaultEOSInputs();
-    const r = calculateEOS({ ...inp, clinicalExam: 'well' });
-    expect(r.riskPosterior).toBeLessThan(r.riskAtBirth);
-  });
-
-  it('ill-appearing multiplies posterior by ~10x or more', () => {
-    const inp = getDefaultEOSInputs();
-    const r = calculateEOS({ ...inp, clinicalExam: 'ill' });
-    expect(r.riskPosterior / r.riskAtBirth).toBeGreaterThan(10);
+describe('GA range', () => {
+  it('flags GA outside the model range', () => {
+    const r = calculateEOS({ ...getDefaultEOSInputs(), modelVersion: '2024', gestationalAgeWeeks: 34 });
+    expect(r.recommendationText).toMatch(/outside 2024 KP model range/);
+    const ok = calculateEOS({ ...getDefaultEOSInputs(), modelVersion: '2017', gestationalAgeWeeks: 34 });
+    expect(ok.recommendationText).not.toMatch(/outside/);
   });
 });

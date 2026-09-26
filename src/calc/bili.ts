@@ -44,32 +44,46 @@ function calculateLocalThresholds(
 }
 
 /**
- * Generate follow-up guidance based on TSB and thresholds
+ * Management guidance per AAP 2022 (Kemper et al., Pediatrics 2022;150(3):e2022058859):
+ * escalation of care at exchange threshold minus 2 mg/dL, and the post-birth
+ * hospitalization follow-up table (Figure 5) for infants who have NOT received
+ * phototherapy, as presented by PediTools bili2022.
  */
 function generateFollowupGuidance(
   tsbValue: number,
   photoThreshold: number,
-  ageHours: number
+  exchangeThreshold: number,
+  ageHours: number,
+  gaWeeks: number
 ): string {
-  const delta = tsbValue - photoThreshold;
+  const prefix = gaWeeks < 35 ? 'GA <35w: AAP 2022 thresholds do not apply (35w values shown). ' : '';
+  const below = Math.round((photoThreshold - tsbValue) * 10) / 10;
 
-  if (delta >= 0) {
-    return 'TSB at or above phototherapy threshold. Initiate phototherapy per protocol. Recheck TSB in 4-6 hours.';
-  } else if (delta >= -2) {
-    return 'TSB approaching phototherapy threshold. Recheck TSB in 4-6 hours. Ensure adequate feeding and hydration.';
-  } else if (delta >= -4) {
-    if (ageHours < 48) {
-      return 'Below phototherapy threshold. Recheck TSB in 8-12 hours or before discharge. Monitor feeding.';
-    } else {
-      return 'Below phototherapy threshold. Recheck TSB in 12-24 hours or at follow-up visit. Monitor feeding and stool output.';
-    }
+  let text: string;
+  if (tsbValue >= exchangeThreshold) {
+    text = 'At/above exchange transfusion threshold. Urgent exchange transfusion; emergent intensive phototherapy and PO + IV hydration; urgent transfer to NICU capable of exchange transfusion.';
+  } else if (tsbValue >= exchangeThreshold - 2) {
+    text = 'At/above escalation-of-care threshold (exchange - 2). Emergent intensive phototherapy and PO + IV hydration; urgent transfer to NICU capable of exchange transfusion; STAT labs; TSB at least every 2 hours.';
+  } else if (below <= 0) {
+    text = 'At/above phototherapy threshold. Initiate phototherapy; measure TSB within 12 hours of starting.';
+  } else if (below < 2) {
+    text = ageHours < 24
+      ? 'Below phototherapy threshold by <2. Delay discharge, consider phototherapy, measure TSB in 4-8 hours.'
+      : 'Below phototherapy threshold by <2. Measure TSB in 4-24 hours; options: delay discharge and consider phototherapy, home phototherapy if criteria met, or discharge with close follow-up.';
+  } else if (below < 3.5) {
+    text = 'Below phototherapy threshold. If discharging: TSB or TcB in 4-24 hours.';
+  } else if (below < 5.5) {
+    text = 'Below phototherapy threshold. If discharging: TSB or TcB in 1-2 days.';
+  } else if (below < 7) {
+    text = ageHours < 72
+      ? 'Below phototherapy threshold. If discharging: follow-up within 2 days; TcB or TSB per clinical judgment.'
+      : 'Below phototherapy threshold. If discharging: follow-up per clinical judgment.';
   } else {
-    if (ageHours < 24) {
-      return 'Well below threshold. Routine feeding support. Consider recheck before discharge based on risk factors.';
-    } else {
-      return 'Well below threshold. Routine feeding support and follow-up per discharge timing and clinical context.';
-    }
+    text = ageHours < 72
+      ? 'Below phototherapy threshold. If discharging: follow-up within 3 days; TcB or TSB per clinical judgment.'
+      : 'Below phototherapy threshold. If discharging: follow-up per clinical judgment.';
   }
+  return prefix + text;
 }
 
 /**
@@ -171,7 +185,7 @@ export async function calculateBili(
   }
 
   const deltaToPhoto = Math.round((tsbValue - photoThreshold) * 10) / 10;
-  const followupGuidance = generateFollowupGuidance(tsbValue, photoThreshold, ageHours);
+  const followupGuidance = generateFollowupGuidance(tsbValue, photoThreshold, exchangeThreshold, ageHours, gestationalAgeWeeks);
 
   return {
     photoThreshold: Math.round(photoThreshold * 10) / 10,
@@ -197,7 +211,7 @@ export function calculateBiliSync(inputs: BiliInputs): BiliOutputs {
   );
 
   const deltaToPhoto = Math.round((tsbValue - thresholds.photo) * 10) / 10;
-  const followupGuidance = generateFollowupGuidance(tsbValue, thresholds.photo, ageHours);
+  const followupGuidance = generateFollowupGuidance(tsbValue, thresholds.photo, thresholds.exchange, ageHours, gestationalAgeWeeks);
 
   return {
     photoThreshold: thresholds.photo,

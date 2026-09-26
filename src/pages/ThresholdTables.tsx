@@ -52,14 +52,14 @@ export function ThresholdTables({ onBack }: ThresholdTablesProps) {
   const availableGAs = Object.keys(tableData).map(Number).sort((a, b) => b - a);
   const thresholds = tableData[selectedGA] || [];
 
-  // Group thresholds by day for display
+  // Group thresholds by day for display. Index i holds the threshold for hour i + 1.
   const dayData: { day: number; hours: { hour: number; value: number }[] }[] = [];
   for (let day = 0; day <= 14; day++) {
     const hours: { hour: number; value: number }[] = [];
     for (let h = 0; h < 24; h++) {
-      const hourIndex = day * 24 + h;
-      if (hourIndex < thresholds.length) {
-        hours.push({ hour: hourIndex, value: thresholds[hourIndex] });
+      const hour = day * 24 + h;
+      if (hour >= 1 && hour <= 336 && hour - 1 < thresholds.length) {
+        hours.push({ hour, value: thresholds[hour - 1] });
       }
     }
     if (hours.length > 0) {
@@ -196,8 +196,8 @@ export function ThresholdTables({ onBack }: ThresholdTablesProps) {
                 </tr>
               </thead>
               <tbody>
-                {[0, 12, 24, 36, 48, 72, 96, 120, 168, 336].map(hour => {
-                  const value = hour < thresholds.length ? thresholds[hour] : thresholds[thresholds.length - 1];
+                {[1, 12, 24, 36, 48, 72, 96, 120, 168, 336].map(hour => {
+                  const value = thresholds[Math.min(hour, thresholds.length) - 1];
                   return (
                     <tr key={hour}>
                       <td>{hour}h ({(hour / 24).toFixed(1)} days)</td>

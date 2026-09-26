@@ -1,201 +1,256 @@
 /**
  * Kaiser Permanente Early-Onset Sepsis (EOS) Calculator
  *
- * 1:1 port of the KP multivariable logistic regression.
- * Coefficients fit from KP-scraped outputs in scripts/eos_coefficients.json.
+ * Implements the KP multivariable logistic regression exactly as KP publishes it:
  *
- * Model form (log-odds):
- *   logit(p) = intercept
- *            + beta_temp * (TempF - 98)
- *            + beta_rom  * ((ROM_h + 0.05)^0.2 - 0.05^0.2)
- *            + beta_ga_lin * (GA - 39.5) + beta_ga_quad * (GA - 39.5)^2 + beta_ga_cub * (GA - 39.5)^3
- *            + beta_GBS (0 if negative, beta_gbs_positive, or beta_gbs_unknown)
- *            + beta_abx (0 if none, broad4/broad2/gbs2)
- *            + ln(baselineIncidence / 0.5)
- *   risk_per_1000 = 1000 / (1 + exp(-logit))
+ *   2017 (original) model — Puopolo KM et al. Pediatrics 2011;128:e1155, with the
+ *     sign correction for GBS-unknown and the incidence-specific intercepts from
+ *     https://neonatalsepsiscalculator.kaiserpermanente.org/EmrFAQ.aspx
+ *   2024 (updated) model — Kuzniewicz MW et al. Pediatrics 2024;154(4):e2023065267,
+ *     coefficients and intercept table from
+ *     https://neonatalsepsiscalculator.kaiserpermanente.org/ModelUpdateFAQ.aspx
  *
- * Posterior risk = Bayesian update via clinical-exam likelihood ratio.
+ *   logit = intercept(incidence)
+ *         + b_temp * TempF
+ *         + b_ga * GA + b_ga2 * GA^2          (GA in exact weeks: weeks + days/7)
+ *         + b_rom * (ROM_h + 0.05)^0.2
+ *         + b_abx1 * [GBS IAP >=2h, or broad-spectrum 2-3.9h]
+ *         + b_abx2 * [broad-spectrum >=4h]
+ *         + b_gbs_pos * [GBS+] + b_gbs_unk * [GBS unknown]
+ *   risk at birth = 1 / (1 + exp(-logit))
+ *   posterior odds = prior odds * LR(clinical exam)
+ *
+ * The intercepts are the exact values KP's web calculator submits for each
+ * incidence in its dropdown. With them this module reproduces every value in
+ * kp-eos-data.csv to the displayed 0.01/1000 (see eos.test.ts).
  */
 
 import { EOSInputs, EOSOutputs, EOSModelVersion } from '../types';
 
-// ============================================================================
-// FITTED LOGISTIC REGRESSION COEFFICIENTS
-// Source: scripts/fit_eos_regression.py against scripts/eos_coefficients.json
-// 2024: residual logit std 0.014 (N=37, max |Δ| < 0.5/1000 at risks up to 117/1000)
-// 2017: residual logit std 0.050 (N=20, max |Δ| ~1.5/1000 at 16/1000 risk)
-// ============================================================================
-
-interface EOSCoefficients {
-  intercept: number;
+interface EOSModel {
   beta_temp_perF: number;
-  beta_rom_per_h_transform: number;
-  beta_ga_linear: number;
-  beta_ga_quadratic: number;
-  beta_ga_cubic: number;
+  beta_ga: number;
+  beta_ga_sq: number;
+  beta_rom: number;
+  beta_abx1: number;
+  beta_abx2: number;
   beta_gbs_positive: number;
   beta_gbs_unknown: number;
-  beta_abx_broad4: number;
-  beta_abx_broad2: number;
-  beta_abx_gbs2: number;
+  /** incidence per 1000 live births -> intercept, as submitted by KP's calculator dropdown */
+  intercepts: [number, number][];
   lr: { well: number; equivocal: number; ill: number };
+  gaMinWeeks: number;
+  gaMaxWeeks: number;
 }
 
-const COEFFS_2024: EOSCoefficients = {
-  intercept: -9.593116054518424,
-  beta_temp_perF: 0.8498042547388,
-  beta_rom_per_h_transform: 0.8628523116070808,
-  beta_ga_linear: 0.04912722128938273,
-  beta_ga_quadratic: 0.09579499600951341,
-  beta_ga_cubic: -0.000380545990839698,
-  beta_gbs_positive: 1.0240788749519707,
-  beta_gbs_unknown: 1.133172958320686,
-  beta_abx_broad4: -2.2991858960420295,
-  beta_abx_broad2: -2.299185896042028,
-  beta_abx_gbs2: -2.2991858960420277,
-  lr: { well: 0.36, equivocal: 3.65, ill: 14.5 },
-};
-
-const COEFFS_2017: EOSCoefficients = {
-  intercept: -10.798254469974829,
-  beta_temp_perF: 0.8917181562609888,
-  beta_rom_per_h_transform: 1.2973886376824437,
-  beta_ga_linear: -0.015754608313252615,
-  beta_ga_quadratic: 0.13354358826590823,
-  beta_ga_cubic: 0.010328744464223938,
-  beta_gbs_positive: 0.5583822918543534,
-  beta_gbs_unknown: -0.06611626447872114,
-  beta_abx_broad4: -1.2852347963669646,
-  beta_abx_broad2: -1.299842972767625,
-  beta_abx_gbs2: -1.2146704883588546,
+const MODEL_2017: EOSModel = {
+  beta_temp_perF: 0.868,
+  beta_ga: -6.9325,
+  beta_ga_sq: 0.0877,
+  beta_rom: 1.2256,
+  beta_abx1: -1.0488,
+  beta_abx2: -1.1861,
+  beta_gbs_positive: 0.5771,
+  beta_gbs_unknown: 0.0427,
+  intercepts: [
+    [0.1, 38.952265],
+    [0.2, 39.646367],
+    [0.3, 40.0528],
+    [0.4, 40.3415],
+    [0.5, 40.5656],
+    [0.6, 40.7489],
+    [0.7, 40.903919],
+    [0.8, 41.0384],
+    [0.9, 41.1571],
+    [1.0, 41.263432],
+    [2.0, 41.965852],
+    [4.0, 42.676976],
+  ],
+  // Upper 95% CI likelihood ratios (Escobar 2014), per KP EMR FAQ
   lr: { well: 0.41, equivocal: 5.0, ill: 21.2 },
+  gaMinWeeks: 34,
+  gaMaxWeeks: 43,
 };
 
-const ROM_TRANSFORM_ZERO = Math.pow(0.05, 0.2);
+const MODEL_2024: EOSModel = {
+  beta_temp_perF: 0.85194656,
+  beta_ga: -7.72247124,
+  beta_ga_sq: 0.09842383,
+  beta_rom: 0.86770862,
+  beta_abx1: -2.13142945,
+  beta_abx2: -2.33985917,
+  beta_gbs_positive: 1.02265353,
+  beta_gbs_unknown: 1.13710111,
+  intercepts: [
+    [0.05, 55.6],
+    [0.1, 56.3],
+    [0.2, 57.0],
+    [0.27, 57.3],
+    [0.3, 57.4],
+    [0.4, 57.7],
+    [0.5, 57.9],
+    [0.6, 58.1],
+    [0.7, 58.2],
+    [0.8, 58.4],
+    [0.9, 58.5],
+    [1.0, 58.6],
+    [2.0, 59.3],
+    [4.0, 60.0],
+    [5.0, 60.2],
+  ],
+  // Point-estimate likelihood ratios, per KP 2024 Model Update FAQ
+  lr: { well: 0.36, equivocal: 3.65, ill: 14.5 },
+  gaMinWeeks: 35,
+  gaMaxWeeks: 43,
+};
 
-function romTransform(hours: number): number {
-  return Math.pow(Math.max(hours, 0) + 0.05, 0.2) - ROM_TRANSFORM_ZERO;
+function getModel(version: EOSModelVersion): EOSModel {
+  return version === '2024' ? MODEL_2024 : MODEL_2017;
+}
+
+/** Incidence options (per 1000 live births) offered by KP's calculator for each model. */
+export function getIncidenceOptions(version: EOSModelVersion): number[] {
+  return getModel(version).intercepts.map(([inc]) => inc);
+}
+
+function logOdds(per1000: number): number {
+  const p = per1000 / 1000;
+  return Math.log(p / (1 - p));
+}
+
+/**
+ * Intercept for a baseline incidence. KP's tabulated value is used when the
+ * incidence is one KP offers; otherwise the intercept is interpolated (or
+ * extrapolated from the nearest pair) linearly in the log-odds of incidence,
+ * which is the form of KP's prior-correction adjustment.
+ */
+function interceptFor(model: EOSModel, incidence: number): number {
+  const table = model.intercepts;
+  const exact = table.find(([inc]) => Math.abs(inc - incidence) < 1e-9);
+  if (exact) return exact[1];
+
+  let i = table.findIndex(([inc]) => inc > incidence);
+  if (i <= 0) i = i === 0 ? 1 : table.length - 1;
+  const [x0, y0] = table[i - 1];
+  const [x1, y1] = table[i];
+  const t = (logOdds(incidence) - logOdds(x0)) / (logOdds(x1) - logOdds(x0));
+  return y0 + t * (y1 - y0);
 }
 
 function celsiusToFahrenheit(c: number): number {
   return c * 9 / 5 + 32;
 }
 
-type AbxBucket = 'none' | 'broad4' | 'broad2' | 'gbs2';
+type AbxCategory = 'none' | 'abx1' | 'abx2';
 
 /**
- * Map UI form's (type, duration) combo to KP's four abx buckets.
- *   none | <2h     → 'none'
- *   gbsSpecific  + 2-4h or >=4h → 'gbs2'
- *   broadSpectrum + 2-4h        → 'broad2'
- *   broadSpectrum + >=4h        → 'broad4'
+ * Map UI (type, duration) to KP's antibiotic categories.
+ *   abx1: GBS-specific IAP >=2h, or broad-spectrum 2-3.9h
+ *   abx2: broad-spectrum >=4h
+ *   none: no antibiotics, or any antibiotics <2h
  */
 function mapAntibiotics(
   type: EOSInputs['antibioticType'],
   duration: EOSInputs['antibioticDuration']
-): AbxBucket {
+): AbxCategory {
   if (type === 'none' || duration === 'none' || duration === 'lessThan2h') {
     return 'none';
   }
-  if (type === 'gbsSpecific') {
-    return 'gbs2';
+  if (type === 'broadSpectrum' && duration === 'greaterThan4h') {
+    return 'abx2';
   }
-  if (type === 'broadSpectrum') {
-    return duration === 'greaterThan4h' ? 'broad4' : 'broad2';
-  }
-  return 'none';
+  return 'abx1';
 }
 
-function computeLogit(inputs: EOSInputs, c: EOSCoefficients): number {
+function computeLogit(inputs: EOSInputs, m: EOSModel): number {
   const tempF = celsiusToFahrenheit(inputs.maternalTempC);
   const ga = inputs.gestationalAgeWeeks + inputs.gestationalAgeDays / 7;
-  const x = ga - 39.5;
 
-  let logit = c.intercept;
-  logit += c.beta_temp_perF * (tempF - 98);
-  logit += c.beta_rom_per_h_transform * romTransform(inputs.romHours);
-  logit += c.beta_ga_linear * x;
-  logit += c.beta_ga_quadratic * x * x;
-  logit += c.beta_ga_cubic * x * x * x;
-
-  if (inputs.gbsStatus === 'positive') logit += c.beta_gbs_positive;
-  else if (inputs.gbsStatus === 'unknown') logit += c.beta_gbs_unknown;
+  let logit = interceptFor(m, inputs.baselineIncidence);
+  logit += m.beta_temp_perF * tempF;
+  logit += m.beta_ga * ga + m.beta_ga_sq * ga * ga;
+  logit += m.beta_rom * Math.pow(Math.max(inputs.romHours, 0) + 0.05, 0.2);
 
   const abx = mapAntibiotics(inputs.antibioticType, inputs.antibioticDuration);
-  if (abx === 'broad4') logit += c.beta_abx_broad4;
-  else if (abx === 'broad2') logit += c.beta_abx_broad2;
-  else if (abx === 'gbs2') logit += c.beta_abx_gbs2;
+  if (abx === 'abx1') logit += m.beta_abx1;
+  else if (abx === 'abx2') logit += m.beta_abx2;
 
-  // Baseline incidence enters as a log-odds offset; fit was at 0.5/1000.
-  if (inputs.baselineIncidence > 0 && inputs.baselineIncidence !== 0.5) {
-    logit += Math.log(inputs.baselineIncidence / 0.5);
-  }
+  if (inputs.gbsStatus === 'positive') logit += m.beta_gbs_positive;
+  else if (inputs.gbsStatus === 'unknown') logit += m.beta_gbs_unknown;
 
   return logit;
 }
 
 function logitToPer1000(logit: number): number {
-  const p = 1 / (1 + Math.exp(-logit));
-  return p * 1000;
+  return 1000 / (1 + Math.exp(-logit));
 }
 
-function applyLikelihoodRatio(
-  priorPer1000: number,
-  exam: EOSInputs['clinicalExam'],
-  c: EOSCoefficients
-): number {
-  const lr = c.lr[exam];
-  const priorProb = priorPer1000 / 1000;
-  const priorOdds = priorProb / (1 - priorProb);
+function applyLikelihoodRatio(priorPer1000: number, lr: number): number {
+  const priorOdds = priorPer1000 / (1000 - priorPer1000);
   const posteriorOdds = priorOdds * lr;
-  const posteriorProb = posteriorOdds / (1 + posteriorOdds);
-  return posteriorProb * 1000;
+  return (posteriorOdds / (1 + posteriorOdds)) * 1000;
 }
 
 // ============================================================================
 // RECOMMENDATIONS
+// Mirrors the KP web calculator's output (verified against live KP results):
+//   Clinical illness: posterior >=3 "Empiric antibiotics", else "Consider starting
+//     empiric antibiotics"; vitals per NICU.
+//   Well / equivocal: posterior >=3 empiric antibiotics (vitals per NICU);
+//     1-2.99 blood culture (vitals q4h x24h); <1 no culture, no antibiotics,
+//     with vitals q4h x24h if risk at birth >=1, otherwise routine vitals.
+// Compared on the values as displayed (rounded to 0.01/1000).
 // ============================================================================
 
-const DEFAULT_THRESHOLDS = {
-  routine_max: 0.50,
-  enhanced_max: 1.00,
-  labs_max: 3.00,
-};
+const CULTURE_MIN = 1;
+const EMPIRIC_MIN = 3;
+const ENHANCED_VITALS_BIRTH_MIN = 1;
 
 function getRecommendation(
-  riskPer1000: number,
-  thresholds = DEFAULT_THRESHOLDS
+  exam: EOSInputs['clinicalExam'],
+  riskAtBirth: number,
+  riskPosterior: number
 ): { code: EOSOutputs['recommendationCode']; text: string } {
-  if (riskPer1000 <= thresholds.routine_max) {
-    return { code: 'routine', text: 'No culture, no antibiotics. Routine vitals.' };
-  } else if (riskPer1000 <= thresholds.enhanced_max) {
-    return { code: 'enhanced', text: 'No culture, no antibiotics. Vitals every 4 hours for 24 hours.' };
-  } else if (riskPer1000 <= thresholds.labs_max) {
-    return { code: 'labs', text: 'Blood culture, close monitoring. Consider antibiotics if clinical concern.' };
-  } else {
-    return { code: 'empiric', text: 'Strongly consider empiric antibiotics. Blood culture recommended.' };
+  if (exam === 'ill') {
+    return riskPosterior >= EMPIRIC_MIN
+      ? { code: 'empiric', text: 'Empiric antibiotics. Vitals per NICU.' }
+      : { code: 'empiric', text: 'Consider starting empiric antibiotics. Vitals per NICU.' };
   }
+  if (riskPosterior >= EMPIRIC_MIN) {
+    return { code: 'empiric', text: 'Empiric antibiotics. Vitals per NICU.' };
+  }
+  if (riskPosterior >= CULTURE_MIN) {
+    return { code: 'labs', text: 'Blood culture. Vitals every 4 hours for 24 hours.' };
+  }
+  if (riskAtBirth >= ENHANCED_VITALS_BIRTH_MIN) {
+    return { code: 'enhanced', text: 'No culture, no antibiotics. Vitals every 4 hours for 24 hours.' };
+  }
+  return { code: 'routine', text: 'No culture, no antibiotics. Routine vitals.' };
 }
 
 // ============================================================================
 // MAIN EXPORTED FUNCTIONS
 // ============================================================================
 
-export function calculateEOS(
-  inputs: EOSInputs,
-  thresholds = DEFAULT_THRESHOLDS
-): EOSOutputs {
-  const coeffs = inputs.modelVersion === '2024' ? COEFFS_2024 : COEFFS_2017;
-  const logit = computeLogit(inputs, coeffs);
-  const riskAtBirth = logitToPer1000(logit);
-  const riskPosterior = applyLikelihoodRatio(riskAtBirth, inputs.clinicalExam, coeffs);
-  const recommendation = getRecommendation(riskPosterior, thresholds);
+export function calculateEOS(inputs: EOSInputs): EOSOutputs {
+  const model = getModel(inputs.modelVersion);
+  const riskAtBirthRaw = logitToPer1000(computeLogit(inputs, model));
+  const riskPosteriorRaw = applyLikelihoodRatio(riskAtBirthRaw, model.lr[inputs.clinicalExam]);
+  const riskAtBirth = Math.round(riskAtBirthRaw * 100) / 100;
+  const riskPosterior = Math.round(riskPosteriorRaw * 100) / 100;
+  const recommendation = getRecommendation(inputs.clinicalExam, riskAtBirth, riskPosterior);
+
+  const ga = inputs.gestationalAgeWeeks + inputs.gestationalAgeDays / 7;
+  const outOfRange = ga < model.gaMinWeeks || ga >= model.gaMaxWeeks + 1;
+  const text = outOfRange
+    ? `GA outside ${inputs.modelVersion} KP model range (${model.gaMinWeeks}-${model.gaMaxWeeks}w): risk estimate not valid. ${recommendation.text}`
+    : recommendation.text;
 
   return {
-    riskAtBirth: Math.round(riskAtBirth * 100) / 100,
-    riskPosterior: Math.round(riskPosterior * 100) / 100,
+    riskAtBirth,
+    riskPosterior,
     recommendationCode: recommendation.code,
-    recommendationText: recommendation.text,
+    recommendationText: text,
   };
 }
 
@@ -228,7 +283,7 @@ export function getModelInfo(version: EOSModelVersion): {
       year: 2024,
       description: 'Modern cohort with universal GBS screening',
       gbsNote: 'GBS Unknown OR ≈ 3.1 — significant risk when status unknown',
-      reference: 'Kaiser Permanente 2024 Update',
+      reference: 'Kuzniewicz et al., Pediatrics 2024',
       methodology: 'Cohort-based',
     };
   }
@@ -283,14 +338,15 @@ export const MODEL_SELECTION_GUIDANCE = {
     note: 'Consider for settings without universal screening or limited prenatal care.',
   },
   keyDifference: 'GBS Unknown: 2017 OR≈1.0 vs 2024 OR≈3.1',
-  citation: 'Kuzniewicz MW, et al. Pediatrics. 2017; Kaiser Permanente 2024 Update',
+  citation: 'Kuzniewicz MW, et al. JAMA Pediatr. 2017; Kuzniewicz MW, et al. Pediatrics. 2024',
 };
 
 export const TECHNICAL_VARIANCE_NOTE = `
-This calculator is a 1:1 port of the Kaiser Permanente EOS multivariable
-logistic regression. Coefficients were fit against KP web-calculator outputs:
-residual logit std 0.014 (2024, N=37) and 0.050 (2017, N=20). Expect parity with KP to
-within ~0.5/1000 across the tabulated input space.
+This calculator implements the Kaiser Permanente EOS logistic regression using
+the coefficients, incidence-specific intercepts and likelihood ratios KP
+publishes on its EMR FAQ (2017 model) and 2024 Model Update FAQ pages.
+It reproduces every scraped KP web-calculator output in the test set to the
+displayed 0.01/1000.
 
 KEY MODEL DIFFERENCES:
 • GBS Unknown: 2017 OR≈1.0 vs 2024 OR≈3.1

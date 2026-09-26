@@ -1,11 +1,6 @@
 {
   "eos": {
-    "baseline_incidence_per_1000": 0.5,
-    "recommendation_thresholds": {
-      "routine_max": 0.50,
-      "enhanced_max": 1.00,
-      "labs_max": 3.00
-    }
+    "baseline_incidence_per_1000": 0.5
   },
   "bili": {
     "api_enabled": false,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { EOSInputs, EOSOutputs, BiliInputs, BiliOutputs, EOSModelVersion } from '../types';
 import { ChipGroup } from './ChipGroup';
 import { Stepper } from './Stepper';
+import { IncidenceSelect } from './IncidenceSelect';
 import {
   GBS_OPTIONS,
   ABX_TYPE_OPTIONS,
@@ -71,8 +72,8 @@ export function MobileShell({
               label="GA wks"
               value={eosInputs.gestationalAgeWeeks}
               onChange={(v) => onEOSChange({ gestationalAgeWeeks: v })}
-              min={22}
-              max={44}
+              min={34}
+              max={43}
             />
             <Stepper
               label="days"
@@ -98,7 +99,7 @@ export function MobileShell({
               value={eosInputs.romHours}
               onChange={(v) => onEOSChange({ romHours: v })}
               min={0}
-              max={200}
+              max={240}
             />
           </div>
         </section>
@@ -214,15 +215,10 @@ export function MobileShell({
                 value={eosInputs.modelVersion}
                 onChange={(v) => onEOSChange({ modelVersion: v as EOSModelVersion })}
               />
-              <Stepper
-                label="Baseline incidence /1000"
+              <IncidenceSelect
+                modelVersion={eosInputs.modelVersion}
                 value={eosInputs.baselineIncidence}
                 onChange={(v) => onEOSChange({ baselineIncidence: v })}
-                step={0.1}
-                decimals={1}
-                inputMode="decimal"
-                min={0.1}
-                max={5}
               />
             </div>
           )}

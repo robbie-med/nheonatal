@@ -41,20 +41,24 @@ INCIDENCE_2017 = {
     "4.0": "42.676976",
 }
 
-# 2024 model uses different incidence values (from AJAX request)
+# 2024 model uses different incidence values (from the AJAX dropdown after
+# selecting the 2024 model; also tabulated on ModelUpdateFAQ.aspx)
 INCIDENCE_2024 = {
-    "0.1": "55.2",
-    "0.2": "55.9",
-    "0.3": "56.3",
-    "0.4": "56.6",
-    "0.5": "57.9",   # CDC national - from working request
-    "0.6": "57.0",
-    "0.7": "57.2",
-    "0.8": "57.3",
-    "0.9": "57.5",
-    "1.0": "57.6",
-    "2.0": "58.3",
-    "4.0": "59.0",
+    "0.05": "55.6",
+    "0.1": "56.3",
+    "0.2": "57.0",
+    "0.27": "57.3",  # KPNC incidence
+    "0.3": "57.4",
+    "0.4": "57.7",
+    "0.5": "57.9",   # CDC national incidence
+    "0.6": "58.1",
+    "0.7": "58.2",
+    "0.8": "58.4",
+    "0.9": "58.5",
+    "1.0": "58.6",
+    "2.0": "59.3",
+    "4.0": "60.0",
+    "5.0": "60.2",
 }
 
 # Test vectors - systematic permutation of key variables

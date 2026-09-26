@@ -21,11 +21,6 @@ type Page = 'calculator' | 'tables';
 const DEFAULT_CONFIG: AppConfig = {
   eos: {
     baseline_incidence_per_1000: 0.5,
-    recommendation_thresholds: {
-      routine_max: 0.50,
-      enhanced_max: 1.00,
-      labs_max: 3.00,
-    },
   },
   bili: {
     api_enabled: false,
@@ -76,9 +71,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const outputs = calculateEOS(eosInputs, config.eos.recommendation_thresholds);
-    setEOSOutputs(outputs);
-  }, [eosInputs, config.eos.recommendation_thresholds]);
+    setEOSOutputs(calculateEOS(eosInputs));
+  }, [eosInputs]);
 
   useEffect(() => {
     let cancelled = false;

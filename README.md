@@ -10,7 +10,7 @@ A single-page, static webapp for clinicians to calculate:
 - Two custom layouts selected by viewport:
   - **Mobile** — single scroll, sticky bottom dock with combined EOS + bili result and one-tap Copy
   - **Desktop** — inputs on the left, sticky results card and copyable note on the right
-- **Dual EOS model support**: 2017 and 2024 versions, ported from the published KP logistic regression
+- **Dual EOS model support**: 2017 and 2024 versions, using the coefficients KP publishes for each model
 - Combined EOS + bilirubin ASCII note with a single Copy button
 - Optional clock-based age entry (birth time + sample time auto-derive age in hours)
 - "Next baby" reset clears all inputs and defaults age to 18h
@@ -40,7 +40,7 @@ npm test
 ```
 src/
   components/      # React UI components (MobileShell, DesktopShell, ChipGroup, Stepper, ...)
-  calc/            # EOS regression port + Bili threshold calc
+  calc/            # EOS model + Bili threshold calc (with parity tests)
   storage/         # IndexedDB wrapper (Dexie)
   monitor/         # KP fingerprint checker
   format/          # ASCII note formatters (incl. combined note)
@@ -56,8 +56,6 @@ scripts/
   kp-scraper.ps1       # PowerShell scraper alternative
   scrape_2017.py       # 2017-model scrape helper
   scrape_2017_abx.py   # 2017 IAP-coefficient scrape helper
-  fit_eos_regression.py# Fits logistic-regression coefficients from scraped data
-  eos_coefficients.json# Fitted 2017 + 2024 coefficients consumed by src/calc/eos.ts
   kp_fingerprint.js    # CI script for KP monitoring
 kp-eos-data.csv        # Scraped KP verification vectors used by tests
 ```
@@ -65,8 +63,7 @@ kp-eos-data.csv        # Scraped KP verification vectors used by tests
 ## Configuration
 
 Edit `public/config.json` to customize:
-- EOS baseline incidence
-- Recommendation thresholds
+- EOS baseline incidence (default; should be one of KP's dropdown values)
 - Enable/disable PediTools API
 - Show/hide exchange thresholds
 - Default theme
@@ -88,9 +85,14 @@ Implements the Kaiser Permanente Early-Onset Sepsis model with support for both 
 
 ### Implementation
 
-`src/calc/eos.ts` is a direct port of the Kuzniewicz/Puopolo logistic regression: prior log-odds are computed from gestational age (cubic basis centered at 39.5w), highest maternal temperature, ROM (transformed as `(h+0.05)^0.2`), GBS status, and intrapartum antibiotics; the baseline-incidence offset rescales the prior odds; then the published clinical-exam likelihood ratios produce the posterior risk.
+`src/calc/eos.ts` implements the KP logistic regression with the coefficients, incidence-specific intercepts and clinical-exam likelihood ratios that KP publishes:
 
-Coefficients live in [scripts/eos_coefficients.json](scripts/eos_coefficients.json) and are fitted from KP web outputs scraped into [kp-eos-data.csv](kp-eos-data.csv) via [scripts/fit_eos_regression.py](scripts/fit_eos_regression.py). The test suite (`src/calc/eos.test.ts`) pins the implementation against those vectors — including the reference case 39w0d / 37.0°C / ROM 12h / GBS− / no abx / baseline 0.5 → **0.29/1000 at birth**, **0.10 / 1.06 / 4.19 post-exam**.
+- **2017 model** — Puopolo et al., Pediatrics 2011, as corrected on KP's [EMR FAQ](https://neonatalsepsiscalculator.kaiserpermanente.org/EmrFAQ.aspx)
+- **2024 model** — Kuzniewicz et al., Pediatrics 2024, from KP's [2024 Model Update FAQ](https://neonatalsepsiscalculator.kaiserpermanente.org/ModelUpdateFAQ.aspx)
+
+The intercept for each baseline incidence is the exact value KP's calculator submits for that dropdown option, and the incidence picker offers only KP's options. Recommendations follow the KP calculator's output: clinical illness always gets an antibiotic recommendation; for well/equivocal infants, posterior ≥3/1000 → empiric antibiotics, 1–2.99 → blood culture, <1 → no culture (with q4h vitals for 24h when risk at birth ≥1/1000).
+
+`src/calc/eos.test.ts` checks every row of [kp-eos-data.csv](kp-eos-data.csv) (outputs scraped from the KP calculator) at KP's displayed precision, 0.01/1000. Because the coefficients come from KP's published pages, not from this data, the CSV is an independent check. It also includes the reference case 39w0d / 37.0°C / ROM 12h / GBS− / no abx / baseline 0.5 → **0.29/1000 at birth**, **0.10 / 1.06 / 4.19 post-exam**.
 
 ### References
 
@@ -131,7 +133,9 @@ Falls back to local calculations if API is unavailable.
 
 - Phototherapy threshold
 - Exchange threshold
-- Follow-up guidance
+- Guidance per AAP 2022: escalation of care (exchange − 2 mg/dL) and the post-birth discharge follow-up table
+
+Local thresholds live in `src/calc/biliThresholds.ts` (index *i* = hour *i*+1, hours 1–336; age is rounded to the nearest hour as PediTools does). `src/calc/bili.test.ts` checks them against 204 values from the PediTools API across every GA, both risk groups and ages 1–335h.
 
 ## KP Model Monitor
 
@@ -140,13 +144,12 @@ If changes are detected:
 1. Updates `public/kp_status.json`
 2. Creates a GitHub Issue for review
 
-## Scraper & Fitting Scripts
+## Scraper Scripts
 
-The `/scripts` directory contains the pipeline used to fit the EOS regression against the KP site:
+The `/scripts` directory contains the scrapers used to collect verification vectors from the KP site:
 
 1. **Scrape** verification vectors with `kp-scraper.py`, `scrape_2017.py`, or `scrape_2017_abx.py` (rate-limited; honors KP terms of use). Output → `kp-eos-data.csv`.
-2. **Fit** the logistic-regression coefficients with `fit_eos_regression.py`. Output → `scripts/eos_coefficients.json`, which is imported by `src/calc/eos.ts`.
-3. **Validate** with `npm test` — the test suite asserts the implementation matches the scraped table.
+2. **Validate** with `npm test`: the test suite asserts the implementation reproduces the scraped table exactly.
 
 ### kp-scraper.py (Python)
 
