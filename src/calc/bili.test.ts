@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import reference from './fixtures/peditools-bili2022.json';
 import { getPhotoThreshold, getExchangeThreshold } from './biliThresholds';
-import { calculateBiliSync } from './bili';
+import { calculateBili } from './bili';
 
 type Row = [string, number, number, number, number];
 
@@ -45,19 +45,19 @@ describe('AAP 2022 guidance', () => {
 
   it('escalation of care at exchange - 2', () => {
     // 40w 48h: photo 17.0, exchange 24.0
-    const r = calculateBiliSync({ ...base, ageHours: 48, tsbValue: 22.5 });
+    const r = calculateBili({ ...base, ageHours: 48, tsbValue: 22.5 });
     expect(r.followupGuidance).toMatch(/escalation-of-care/);
   });
 
   it('within 2 of phototherapy threshold before 24h: delay discharge', () => {
     // 40w 12h: photo 11.1
-    const r = calculateBiliSync({ ...base, ageHours: 12, tsbValue: 10 });
+    const r = calculateBili({ ...base, ageHours: 12, tsbValue: 10 });
     expect(r.followupGuidance).toMatch(/Delay discharge/);
   });
 
   it('>=7 below threshold after 72h: clinical judgment', () => {
     // 40w 80h: photo 20.6
-    const r = calculateBiliSync({ ...base, ageHours: 80, tsbValue: 13 });
+    const r = calculateBili({ ...base, ageHours: 80, tsbValue: 13 });
     expect(r.followupGuidance).toMatch(/clinical judgment/);
   });
 });

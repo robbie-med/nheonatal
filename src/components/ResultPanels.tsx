@@ -131,12 +131,6 @@ export function ResultPanels({
                     {biliOutputs.deltaToPhoto >= 0 ? '+' : ''}{biliOutputs.deltaToPhoto.toFixed(1)} mg/dL
                   </span>
                 </div>
-                {biliOutputs.isCached && (
-                  <div className="result-item result-warning">
-                    <span className="result-label">Note:</span>
-                    <span className="result-value">Using local calculation (API unavailable)</span>
-                  </div>
-                )}
               </div>
 
               <div className="note-container">

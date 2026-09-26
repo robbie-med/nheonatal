@@ -46,19 +46,6 @@ export interface BiliOutputs {
   exchangeThreshold: number;
   deltaToPhoto: number;
   followupGuidance: string;
-  apiResponse?: BiliApiResponse;
-  isCached: boolean;
-}
-
-export interface BiliApiResponse {
-  ga: number;
-  age: number;
-  bili: number;
-  risk: string;
-  photo_threshold: number;
-  exchange_threshold: number;
-  above_photo: boolean;
-  above_exchange: boolean;
 }
 
 export interface Snapshot {
@@ -90,10 +77,6 @@ export interface KPStatus {
 export interface AppConfig {
   eos: {
     baseline_incidence_per_1000: number;
-  };
-  bili: {
-    api_enabled: boolean;
-    api_base_url: string;
   };
   ui: {
     show_exchange_threshold: boolean;

@@ -64,7 +64,6 @@ kp-eos-data.csv        # Scraped KP verification vectors used by tests
 
 Edit `public/config.json` to customize:
 - EOS baseline incidence (default; should be one of KP's dropdown values)
-- Enable/disable the (experimental, currently non-functional) PediTools API lookup
 - Show/hide exchange thresholds
 - Default theme
 

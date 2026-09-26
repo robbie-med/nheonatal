@@ -11,7 +11,7 @@ import { usePatients } from './hooks/usePatients';
 import { useKPStatus } from './hooks/useKPStatus';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { calculateEOS, getDefaultEOSInputs } from './calc/eos';
-import { calculateBili, calculateBiliSync, getDefaultBiliInputs, calculateAgeHours } from './calc/bili';
+import { calculateBili, getDefaultBiliInputs, calculateAgeHours } from './calc/bili';
 import { formatEOSNote, formatBiliNote } from './format/asciiNotes';
 import { exportAllData, importData } from './storage/db';
 import { EOSInputs, EOSOutputs, BiliInputs, BiliOutputs, AppConfig } from './types';
@@ -21,10 +21,6 @@ type Page = 'calculator' | 'tables';
 const DEFAULT_CONFIG: AppConfig = {
   eos: {
     baseline_incidence_per_1000: 0.5,
-  },
-  bili: {
-    api_enabled: false,
-    api_base_url: 'https://peditools.org/bili2022/api/',
   },
   ui: {
     show_exchange_threshold: true,
@@ -60,7 +56,6 @@ export function App() {
   const [biliInputs, setBiliInputs] = useState<BiliInputs>(getDefaultBiliInputs);
   const [eosOutputs, setEOSOutputs] = useState<EOSOutputs | null>(null);
   const [biliOutputs, setBiliOutputs] = useState<BiliOutputs | null>(null);
-  const [apiAvailable, setApiAvailable] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -75,24 +70,8 @@ export function App() {
   }, [eosInputs]);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (config.bili.api_enabled) {
-        const outputs = await calculateBili(biliInputs, true);
-        if (!cancelled) {
-          setBiliOutputs(outputs);
-          setApiAvailable(!outputs.isCached);
-        }
-      } else {
-        const outputs = calculateBiliSync(biliInputs);
-        if (!cancelled) setBiliOutputs(outputs);
-      }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [biliInputs, config.bili.api_enabled]);
+    setBiliOutputs(calculateBili(biliInputs));
+  }, [biliInputs]);
 
   useEffect(() => {
     if (biliInputs.birthTime && biliInputs.sampleTime) {
@@ -255,11 +234,6 @@ export function App() {
                 Threshold tables
               </button>
             </div>
-            {config.bili.api_enabled && !apiAvailable && (
-              <div className="warning-banner">
-                PediTools API unavailable. Using local AAP 2022 tables.
-              </div>
-            )}
           </div>
         </div>
       </MenuDrawer>
