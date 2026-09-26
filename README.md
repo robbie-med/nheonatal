@@ -2,7 +2,7 @@
 
 A single-page, static webapp for clinicians to calculate:
 - **Neonatal Early-Onset Sepsis (EOS) Risk** using the Kaiser Permanente model (2017 or 2024)
-- **AAP 2022 Hyperbilirubinemia Thresholds** via PediTools API
+- **AAP 2022 Hyperbilirubinemia Thresholds** computed locally from the AAP 2022 hour-specific tables
 
 ## Features
 
@@ -64,7 +64,7 @@ kp-eos-data.csv        # Scraped KP verification vectors used by tests
 
 Edit `public/config.json` to customize:
 - EOS baseline incidence (default; should be one of KP's dropdown values)
-- Enable/disable PediTools API
+- Enable/disable the (experimental, currently non-functional) PediTools API lookup
 - Show/hide exchange thresholds
 - Default theme
 
@@ -121,8 +121,7 @@ For where every EOS and bilirubin number comes from, how it was verified, and ho
 
 ## Bilirubin Calculator
 
-Uses the PediTools bili2022 API for AAP 2022 guidelines.
-Falls back to local calculations if API is unavailable.
+Computes AAP 2022 phototherapy and exchange thresholds locally from the guideline's hour-specific tables. [PediTools bili2022](https://peditools.org/bili2022/) is used only as the reference the tables are tested against.
 
 ### Inputs
 

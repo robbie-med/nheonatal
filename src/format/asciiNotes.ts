@@ -112,10 +112,8 @@ export function formatBiliNote(
   const gaStr = formatGA(inputs.gestationalAgeWeeks, inputs.gestationalAgeDays);
   const riskStr = inputs.hasNeurotoxRiskFactors ? 'present' : 'none';
 
-  const apiLabel = outputs.isCached ? 'LOCAL CALC' : 'AAP 2022 / PEDITOOLS';
-
   const lines = [
-    `BILI (${apiLabel}) ${dateStr}`,
+    `BILI (AAP 2022) ${dateStr}`,
     `Pt: ${patientLabel} GA ${gaStr} age ${Math.round(inputs.ageHours)}h TSB ${inputs.tsbValue.toFixed(1)} mg/dL neurotox RF: ${riskStr}`,
     `Thresholds: photo ${outputs.photoThreshold.toFixed(1)} exch ${outputs.exchangeThreshold.toFixed(1)} delta ${outputs.deltaToPhoto >= 0 ? '+' : ''}${outputs.deltaToPhoto.toFixed(1)}`,
     `A/P: ${outputs.followupGuidance}`
